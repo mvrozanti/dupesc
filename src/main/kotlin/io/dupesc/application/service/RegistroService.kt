@@ -13,6 +13,7 @@ import io.dupesc.domain.service.Canonicalizador
 import io.dupesc.domain.service.DadoInvalidoException
 import io.dupesc.domain.service.RetryPolicy
 import io.dupesc.infrastructure.configuration.DupeProperties
+import io.dupesc.infrastructure.db.RateLimiterDb
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
@@ -24,6 +25,7 @@ class RegistroService(
     private val dlqRepository: DlqRepository,
     private val registry: RegistradoraRegistry,
     private val retryPolicy: RetryPolicy,
+    private val rateLimiterDb: RateLimiterDb,
     private val properties: DupeProperties,
     private val objectMapper: ObjectMapper,
     private val transactionTemplate: TransactionTemplate,
@@ -53,6 +55,11 @@ class RegistroService(
             }
         }
         if (validos.isEmpty()) return
+
+        if (!rateLimiterDb.adquirirPermissao(registradora)) {
+            tratarFalhaEnvio(validos, claimsPorId, RegistradoraException("limite de taxa global", retryavel = true, naoEsgota = true))
+            return
+        }
 
         try {
             val handle = registry.port(registradora).enviar(validos.map { it.second })
