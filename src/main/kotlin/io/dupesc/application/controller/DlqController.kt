@@ -56,13 +56,25 @@ class DlqController(
         }
         val referencia = linha.referencia
             ?: return ResponseEntity.badRequest().body(mapOf("erro" to "sem referencia"))
-        val ok = transactionTemplate.execute {
-            operacaoRepository.reprocessar(referencia) && outboxRepository.reprocessar(referencia)
+        val ok = transactionTemplate.execute { status ->
+            val operacaoOk = operacaoRepository.reprocessar(referencia)
+            val outboxOk = outboxRepository.reprocessar(referencia)
+            if (operacaoOk && outboxOk) {
+                dlqRepository.marcarStatus(id, "REPROCESSADO")
+                true
+            } else {
+                status.setRollbackOnly()
+                false
+            }
         } ?: false
         if (!ok) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf("erro" to "estado nao permite reprocessar"))
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                mapOf(
+                    "erro" to "estado nao permite reprocessar",
+                    "detalhe" to "so FALHA_PERMANENTE com fila em DLQ reprocessa; INDETERMINADO exige conferencia na registradora antes",
+                ),
+            )
         }
-        transactionTemplate.executeWithoutResult { dlqRepository.marcarStatus(id, "REPROCESSADO") }
         return ResponseEntity.ok(mapOf("status" to "REPROCESSADO"))
     }
 
