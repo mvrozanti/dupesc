@@ -54,9 +54,36 @@ Status: **corrigido** (commit) / **planejado** (não começado).
 | 15 | DLQ é write-only — sem listagem nem reprocessamento | `GET /api/dlq` + `POST /api/dlq/{id}/reprocessar` + transições | corrigido |
 | 16 | Menores: backoff pelo 1º item do lote · case de registradora normalizado 3× · `contarPendentes` no repo errado · worker sem `runCatching` · `DUPE_POD_ID` default compartilhado | corrigir cada um | corrigido |
 
+## Segundo round — os consertos criaram problemas piores
+
+O primeiro round consertou os achados originais e introduziu quatro regressões
+mais graves que o que corrigia. Achadas relendo o diff, não pela suíte (que
+estava verde).
+
+| # | Regressão introduzida | Melhoria | Status |
+|---|---|---|---|
+| 17 | `DlqController` **sem autenticação nenhuma** — `GET /api/dlq` devolve CPF/CNPJ, e-mail, chave PIX e IBAN em claro; `POST .../reprocessar` reenfileira registro sem credencial | `X-Api-Key` própria de admin (`dupe.admin.api-key`, distinta da de ingestão) via `ChaveApi` com comparação em tempo constante; `limite` limitado a 500; chave entra no `CredenciaisGuard` | corrigido |
+| 18 | `incrementarConsultas` contava **antes** da consulta e independia do resultado: a janela 423 das 20h às 8h condenava todo lote em voo a `FALHA_PERMANENTE` em ~1 hora | contador só sobe em consulta bem-sucedida que responda `PROCESSANDO`; preso passa a `INDETERMINADO` (estado novo, V5), terminal, com `lote_id` e referência no payload da DLQ, e recusado pelo reprocesso | corrigido |
+| 19 | `retryavel = false` mandava o lote inteiro para a DLQ na primeira tentativa: um `base-url` errado ou um 403 do WAF drenava o backlog | 403/404/405/408/415 reclassificados como rota/acesso (transitório, não esgota); 400/422 bissectam o lote até isolar o item ruim | corrigido |
+| 20 | Reprocesso da DLQ commitava update parcial e devolvia 409: operação em `PENDENTE` **sem linha de fila**, invisível para o worker e fora dos estados terminais | os dois updates e a baixa da DLQ numa transação com `setRollbackOnly` no caminho de falha | corrigido |
+| 21 | **Latente, pré-existente:** `falhaPermanente` fazia `CAST('texto' AS jsonb)` na coluna `erros` — todo caminho de falha permanente lançava `DataIntegrityViolationException` em vez de gravar, então "tentativas esgotadas → DLQ" nunca funcionou | `jsonb_build_object('erro', :erro)` + `ultimo_erro` | corrigido |
+
+Achado 21 só apareceu ao escrever o teste do bisect. Revisão por leitura não o
+pegou em dois rounds.
+
+Cobertura nova: `HardeningTest` (7 testes) — autenticação da DLQ em ambos os
+verbos, orçamento de consultas preservado sob falha, `INDETERMINADO` em vez de
+`FALHA_PERMANENTE`, atomicidade do reprocesso, bisect isolando o item ruim, rota
+errada não drenando a fila. Suíte: 20 testes, verde.
+
 ## Dívida registrada (não implementada agora)
 
 - Poison-pill: bisect de lote com item ruim (reenvia o lote todo hoje).
 - `StateMachine.transicionar` usada só no teste; guardas de produção são strings SQL (3 não usam `origens()`).
 - Cancelamento/alteração de duplicata (precisa PATCH/inativar da CERC).
 - Timestamp/nonce no HMAC do webhook.
+- `consultas-limite` é global; precisa ser por registradora e calibrado contra SLA
+  (ver FAQ 3.5).
+- Vazamento de advisory lock de sessão se o `unlock` falhar (FAQ 4.4).
+- `consultar` fora do teto global de taxa (FAQ 4.1).
+- Autenticação da DLQ é chave estática, sem identidade nem auditoria (FAQ 7.1).

@@ -268,6 +268,7 @@ flowchart TD
     REGISTRADO("REGISTRADO&lt;br/&gt;IUD gravado no título")
     RECUSADO("RECUSADO&lt;br/&gt;rejeição de negócio")
     DLQ("DLQ&lt;br/&gt;falha permanente")
+    INDETERMINADO("INDETERMINADO&lt;br/&gt;desfecho desconhecido&lt;br/&gt;conferência manual")
   end
 
   ingress --&gt; PENDENTE : "grava intenção+operação+outbox"
@@ -281,6 +282,8 @@ flowchart TD
   ENVIADO --&gt; RECUSADO : "rejeição de negócio"
   ENVIADO --&gt; DLQ : "erro persistente"
   EM_ENVIO --&gt; DLQ : "tentativas esgotadas"
+  ENVIADO --&gt; INDETERMINADO : "limite de consultas sem desfecho"
+  INDETERMINADO --&gt; DLQ : "entra na revisão, sem reenvio automático"
 
   classDef extc fill:#ffe0b2,stroke:#e65100,stroke-width:2px
   classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
@@ -291,6 +294,7 @@ flowchart TD
   class PENDENTE,EM_ENVIO,ENVIADO app
   class REGISTRADO ok
   class RECUSADO warn
+  class INDETERMINADO warn
   class DLQ bad
 </pre>
     </div>

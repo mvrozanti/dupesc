@@ -99,10 +99,16 @@ Testes: `./gradlew test` — Testcontainers (Postgres 16) + WireMock.
 
 ## Dívida conhecida
 
-Revisão de arquitetura (Opus) encontrou e corrigiu os bloqueadores de produção (timeouts,
-advisory lock, enum da CERC), perda/duplicação sob operação normal (lease, cursor, DLQ),
-segurança e observabilidade. O registro completo — cada crítica com a melhoria aplicada e
-o status — está em [`docs/revisao-hardening.md`](docs/revisao-hardening.md).
+Duas rodadas de revisão adversarial de arquitetura. A primeira corrigiu os bloqueadores
+de produção (timeouts, advisory lock, enum da registradora), perda/duplicação sob operação
+normal (lease, cursor, DLQ), segurança e observabilidade — e introduziu quatro regressões
+piores, que a segunda rodada corrigiu: DLQ sem autenticação expondo dado pessoal, a janela
+operacional noturna condenando todo lote em voo, 4xx despejando o lote inteiro na DLQ, e o
+reprocesso deixando operação órfã. O registro completo — cada crítica, a melhoria aplicada
+e o status — está em [`docs/revisao-hardening.md`](docs/revisao-hardening.md).
+
+As perguntas adversariais que este desenho atrai — com resposta, e com o limite
+honesto de cada resposta — estão em [`docs/faq-arquitetura.md`](docs/faq-arquitetura.md).
 
 Dívida registrada (não implementada): bisect de lote com poison-pill, cancelamento/
 alteração de duplicata (PATCH/inativar da CERC), timestamp/nonce no HMAC, e a chave
