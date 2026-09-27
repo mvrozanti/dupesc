@@ -71,7 +71,8 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
     override fun falhaPermanente(ids: List<Long>, erro: String) {
         jdbc.sql(
             """
-            UPDATE operacao SET estado = 'FALHA_PERMANENTE', erros = CAST(:erros AS jsonb), atualizado_em = now()
+            UPDATE operacao SET estado = 'FALHA_PERMANENTE', erros = jsonb_build_object('erro', :erros),
+                                ultimo_erro = :erros, atualizado_em = now()
             WHERE id IN (:ids) AND estado IN (:estados)
             """.trimIndent(),
         )
