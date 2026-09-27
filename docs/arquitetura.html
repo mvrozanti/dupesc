@@ -1,0 +1,311 @@
+<title>A Arquitetura do Dupesc</title>
+<style>
+  :root {
+    --ground: #f2f5f7;
+    --ink: #17222d;
+    --muted: #5b6b78;
+    --line: #d6dfe6;
+    --accent: #2e7d32;
+    --slide: #ffffff;
+    --slide-ink: #17222d;
+    --slide-line: #e2e8ed;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0f141a;
+      --ink: #e4ebf1;
+      --muted: #93a4b2;
+      --line: #26313c;
+      --accent: #66bb6a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0f141a;
+    --ink: #e4ebf1;
+    --muted: #93a4b2;
+    --line: #26313c;
+    --accent: #66bb6a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 16px/1.55 "IBM Plex Sans", system-ui, sans-serif;
+  }
+  .page { max-width: 1150px; margin: 0 auto; padding: 56px 28px 72px; }
+
+  header { max-width: 720px; }
+  .overline {
+    font: 500 12px/1 "IBM Plex Mono", monospace;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font: 600 34px/1.15 "IBM Plex Sans", sans-serif;
+    margin: 0 0 10px;
+    text-wrap: balance;
+    letter-spacing: -.01em;
+  }
+  .lede { color: var(--muted); max-width: 560px; margin: 0; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px 26px;
+    margin-top: 30px;
+    padding: 14px 18px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--ground) 60%, transparent);
+  }
+  .lg { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .lg b { font-weight: 600; color: var(--ink); font-size: 13px; }
+  .sw {
+    width: 12px; height: 12px; border-radius: 3px; display: inline-block;
+    border: 1px solid rgba(0,0,0,.18); flex: none;
+  }
+  .shape { display: inline-block; width: 14px; height: 12px; flex: none; }
+  .shape.hex { background: var(--slide); border: 1.5px solid #e65100; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+  .shape.box { background: var(--slide); border: 1.5px solid #2e7d32; border-radius: 3px; }
+  .shape.cyl {
+    background: linear-gradient(#fff 0 18%, #e8eaf6 18% 82%, #fff 82%);
+    border: 1.5px solid #283593; border-radius: 5px / 50%;
+  }
+  .shape.par { background: var(--slide); border: 1.5px solid #455a64; transform: skewX(-12deg); }
+  .shape.dia { background: var(--slide); border: 1.5px solid #455a64; transform: rotate(45deg) scale(.8); }
+  .shape.cir { background: #c8e6c9; border: 1.5px solid #1b5e20; border-radius: 50%; }
+  .shape.pln { border: 1.5px dashed #9e9e9e; border-radius: 3px; }
+  .arrow { font-family: "IBM Plex Mono", monospace; font-size: 13px; }
+
+  section { margin-top: 58px; }
+  .eyebrow {
+    font: 500 12px/1 "IBM Plex Mono", monospace;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 8px;
+  }
+  h2 { font: 600 22px/1.25 "IBM Plex Sans", sans-serif; margin: 0 0 6px; letter-spacing: -.01em; }
+  .caption { color: var(--muted); margin: 0 0 16px; max-width: 640px; }
+
+  .slide {
+    background: var(--slide);
+    color: var(--slide-ink);
+    border: 1px solid var(--slide-line);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(16, 30, 45, .07);
+    padding: 22px 18px;
+    overflow-x: auto;
+  }
+  .slide pre { margin: 0; min-width: 760px; }
+
+  .pitch {
+    margin-top: 64px;
+    border-top: 1px solid var(--line);
+    padding-top: 28px;
+    max-width: 720px;
+  }
+  .pitch h2 { font-size: 16px; }
+  .pitch ol { margin: 12px 0 0; padding-left: 0; list-style: none; display: grid; gap: 8px; }
+  .pitch li { display: flex; gap: 14px; color: var(--muted); }
+  .pitch .n {
+    font: 500 13px/1.6 "IBM Plex Mono", monospace;
+    color: var(--accent); flex: none; font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 720px) {
+    .page { padding: 36px 16px 56px; }
+    h1 { font-size: 28px; }
+    .legend { gap: 8px 16px; }
+  }
+</style>
+
+<div class="page">
+  <header>
+    <div class="overline">POC · escrituração de duplicatas</div>
+    <h1>A arquitetura do Dupesc</h1>
+    <p class="lede">Um binário, N pods, um Postgres. Três diagramas contam o que o
+    repositório faz — o que provisionamos, como o dado anda, e o que cada porta de
+    entrada entrega.</p>
+    <div class="legend" role="list" aria-label="legenda">
+      <span class="lg"><span class="shape hex"></span><b>externo</b></span>
+      <span class="lg"><span class="shape box"></span><b>nosso</b></span>
+      <span class="lg"><span class="shape cyl"></span><b>banco</b></span>
+      <span class="lg"><span class="shape par"></span><b>porta de entrada</b></span>
+      <span class="lg"><span class="shape dia"></span><b>decisão</b></span>
+      <span class="lg"><span class="shape cir"></span><b>garantia</b></span>
+      <span class="lg"><span class="shape pln"></span><b>planejado</b></span>
+      <span class="lg"><span class="arrow">⇒</span><b>grava antes de agir</b></span>
+      <span class="lg"><span class="arrow">→</span><b>idempotente</b></span>
+      <span class="lg"><span class="arrow">⇢</span><b>planejado</b></span>
+    </div>
+  </header>
+
+  <section>
+    <div class="eyebrow">Infraestrutura</div>
+    <h2>O que provisionamos</h2>
+    <p class="caption">Um binário em N pods, um Postgres multi-AZ, ALB com mTLS para os
+    webhooks. Duas pontas externas: CERC e o sistema legado.</p>
+    <div class="slide">
+<pre class="mermaid">
+flowchart LR
+  subgraph ext["EXTERNO"]
+    legado{{"sistema legado"}}
+    cerc{{"CERC · homolog"}}
+  end
+  subgraph nos["NOSSO"]
+    pod("dupesc&lt;br/&gt;N pods · 1 binário&lt;br/&gt;jobs + API")
+    obs("observabilidade&lt;br/&gt;Prometheus · gauges")
+  end
+  subgraph aws["AWS"]
+    alb("ALB · mTLS")
+    rds[("Postgres 16&lt;br/&gt;multi-AZ")]
+    sm("Secrets Manager&lt;br/&gt;OAuth2 · HMAC")
+  end
+
+  pod --&gt;|"puxa páginas · 1000/pág"| legado
+  legado -.-&gt;|"push · planejado"| pod
+  pod ==&gt;|"1 tx: intenção+operação+outbox"| rds
+  pod --&gt;|"POST lote · OAuth2"| cerc
+  cerc --&gt;|"webhook · mTLS"| alb
+  alb --&gt;|"X-Signature"| pod
+  sm --&gt;|"credenciais"| pod
+  pod --&gt;|"métricas"| obs
+  obs --&gt;|"lê filas · dlq"| rds
+
+  classDef extc fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+  classDef inf fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+  classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+  classDef db fill:#e8eaf6,stroke:#283593,stroke-width:2px
+  class legado,cerc extc
+  class alb,sm inf
+  class pod,obs app
+  class rds db
+</pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Fluxo dos dados</div>
+    <h2>Ida, volta e reparo</h2>
+    <p class="caption">A ida grava antes de agir; a volta é deduplicada e aplicada numa
+    transação; o reconciliador conserta o que ficou pendurado.</p>
+    <div class="slide">
+<pre class="mermaid">
+flowchart LR
+  subgraph o1["1 · origem"]
+    legado{{"sistema legado"}}
+  end
+  subgraph o2["2 · banco único"]
+    intencao[("intenção")]
+    operacao[("operação&lt;br/&gt;PENDENTE → REGISTRADO")]
+    outbox[("outbox")]
+    titulo[("título&lt;br/&gt;IUD ↔ interno")]
+    eventos[("eventos_recebidos")]
+    dlq[("dlq&lt;br/&gt;OUTBOX · WEBHOOK · LEITOR")]
+  end
+  subgraph o3["3 · processo"]
+    leitor("LeitorJob&lt;br/&gt;lock 741001")
+    worker("OutboxWorker&lt;br/&gt;SKIP LOCKED · CB · rate limiter")
+    reconcil("ReconciliadorJob&lt;br/&gt;lock 741002 · 5min")
+    webhook("WebhookController")
+  end
+  subgraph o4["4 · registradora"]
+    cerc{{"CERC"}}
+  end
+
+  legado --&gt;|"páginas · checkpoint"| leitor
+  leitor ==&gt;|"1 tx: intenção+operação+outbox"| outbox
+  outbox --&gt;|"claim ≤200 · SKIP LOCKED"| worker
+  worker --&gt;|"POST lote"| cerc
+  worker ==&gt;|"ENVIADO"| operacao
+  cerc --&gt;|"webhook lote-finalizado"| webhook
+  webhook ==&gt;|"dedup event_id"| eventos
+  webhook ==&gt;|"PROCESSADO → REGISTRADO"| operacao
+  webhook ==&gt;|"IUD ↔ interno"| titulo
+  webhook ==&gt;|"erro: payload durável · 200"| dlq
+  reconcil --&gt;|"ENVIADO &gt; 30min"| operacao
+  reconcil --&gt;|"GET status lote"| cerc
+  cerc --&gt;|"resultado"| reconcil
+  reconcil ==&gt;|"REGISTRADO · RECUSADO · refila"| operacao
+  reconcil ==&gt;|"IUD"| titulo
+  reconcil --&gt;|"repara leases"| outbox
+
+  classDef extc fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+  classDef db fill:#e8eaf6,stroke:#283593,stroke-width:2px
+  classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+  classDef err fill:#ffebee,stroke:#c62828,stroke-width:2px
+  class legado,cerc extc
+  class intencao,operacao,outbox,titulo,eventos db
+  class leitor,worker,reconcil,webhook app
+  class dlq err
+</pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Pontos de entrada</div>
+    <h2>Quem chama, e o que cada porta entrega</h2>
+    <p class="caption">Cinco portas, cada uma com a própria garantia. Tracejado é o que
+    ainda não foi construído.</p>
+    <div class="slide">
+<pre class="mermaid">
+flowchart TD
+  inicio{"quem inicia?"}
+
+  inicio --&gt;|"job interno"| leitor[/"LeitorJob · puxa páginas"/]
+  leitor --&gt; tx1["1 tx: intenção+operação+outbox"]
+  tx1 --&gt; g1(("não perde ·&lt;br/&gt;resume do checkpoint"))
+
+  inicio -.-&gt;|"legado · push"| push[/"POST /api/legado/operacoes"/]:::plan
+  push -.-&gt; tx2["gravarOperação · 1 tx&lt;br/&gt;mesmo caminho do leitor"]:::plan
+  tx2 -.-&gt; g2(("não perde ·&lt;br/&gt;não duplica")):::plan
+
+  inicio --&gt;|"registradora"| wh[/"POST /webhook/{registradora}"/]
+  wh --&gt; hmac{"HMAC válido?"}
+  hmac --&gt;|"não"| g401(("401 · nada gravado"))
+  hmac --&gt;|"sim"| dup{"event_id já visto?"}
+  dup --&gt;|"sim"| g4(("idempotente · 200"))
+  dup --&gt;|"não"| tx3["1 tx: dedup + transição&lt;br/&gt;PROCESSADO → REGISTRADO + título"]
+  tx3 --&gt; g5(("exatamente-&lt;br/&gt;uma-vez"))
+  tx3 --&gt;|"exceção"| dlq["dlq: payload durável&lt;br/&gt;responde 200"]
+  dlq --&gt; g3(("nunca perde&lt;br/&gt;webhook"))
+
+  inicio -.-&gt;|"operador · tela"| get[/"GET /api/operacoes&lt;br/&gt;estado · referência"/]:::plan
+  get -.-&gt; ro["leitura: operação + título"]:::plan
+  ro -.-&gt; g6(("read-only")):::plan
+
+  inicio --&gt;|"time de ops"| met[/"métricas + dlq&lt;br/&gt;actuator · Prometheus"/]
+  met --&gt; al["AlertaJob&lt;br/&gt;fila · mais antiga · dlq"]
+  al --&gt; g7(("visibilidade ·&lt;br/&gt;alertas"))
+
+  classDef plan fill:#fafafa,stroke:#9e9e9e,stroke-width:1.5px,stroke-dasharray:5 4
+  classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+  classDef dec fill:#fff,stroke:#455a64,stroke-width:2px
+  classDef gar fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+  classDef err fill:#ffebee,stroke:#c62828,stroke-width:2px
+  class leitor,wh,met,tx1,tx3,al app
+  class inicio,hmac,dup dec
+  class g1,g401,g4,g5,g3,g7 gar
+  class dlq err
+</pre>
+    </div>
+  </section>
+
+  <div class="pitch">
+    <h2>Roteiro de apresentação</h2>
+    <ol>
+      <li><span class="n">1</span><span>Um binário, N pods, um Postgres: escala horizontal, garantia no banco.</span></li>
+      <li><span class="n">2</span><span>Regra de ouro: grava na transação — a seta grossa — antes de agir lá fora. Pod morreu? Nada se perde.</span></li>
+      <li><span class="n">3</span><span>Ida: SKIP LOCKED — cada operação sai com um pod só, não duplica.</span></li>
+      <li><span class="n">4</span><span>Volta: webhook deduplicado por event_id e aplicado numa transação — exatamente-uma-vez.</span></li>
+      <li><span class="n">5</span><span>Erro vira linha na dlq com o payload inteiro; a registradora sempre recebe 200.</span></li>
+      <li><span class="n">6</span><span>O tracejado é planejado — e o push reusa o caminho do leitor.</span></li>
+    </ol>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.4.1/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "strict" });
+</script>
