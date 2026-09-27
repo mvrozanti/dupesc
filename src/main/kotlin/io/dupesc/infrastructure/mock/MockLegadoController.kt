@@ -23,7 +23,7 @@ class MockLegadoController {
     private val total = AtomicInteger(0)
 
     @GetMapping("/legado/operacoes")
-    fun operacoes(@RequestParam afterId: Long, @RequestParam tamanho: Int): PaginaLegado {
+    fun operacoes(@RequestParam("after_id") afterId: Long, @RequestParam tamanho: Int): PaginaLegado {
         val inicio = afterId + 1
         val fim = minOf(inicio + tamanho, total.get().toLong())
         val operacoes = (inicio until fim).map { n -> operacao(n) }

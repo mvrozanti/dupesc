@@ -44,6 +44,9 @@ class MockCercEstado(
     private val scheduler = Executors.newSingleThreadScheduledExecutor {
         Thread(it, "mock-cerc").apply { isDaemon = true }
     }
+    private val webhookPool = Executors.newCachedThreadPool {
+        Thread(it, "mock-cerc-webhook").apply { isDaemon = true }
+    }
     private val secret = properties.cerc.webhookSecret
     private val destinos = properties.mock.webhookDestino
     private val client = builder.build()
@@ -103,16 +106,18 @@ class MockCercEstado(
     private fun enviarWebhook(payload: String) {
         if (destinos.isEmpty()) return
         val destino = destinos[destinoAtual.getAndIncrement() % destinos.size]
-        try {
-            client.post()
-                .uri("$destino/webhook/cerc")
-                .header("X-Signature", assinar(payload))
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(payload)
-                .retrieve()
-                .toBodilessEntity()
-        } catch (e: Exception) {
-            log.warn("falha ao entregar webhook para {}: {}", destino, e.message)
+        webhookPool.submit {
+            try {
+                client.post()
+                    .uri("$destino/webhook/cerc")
+                    .header("X-Signature", assinar(payload))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .toBodilessEntity()
+            } catch (e: Exception) {
+                log.warn("falha ao entregar webhook para {}: {}", destino, e.message)
+            }
         }
     }
 
@@ -123,7 +128,10 @@ class MockCercEstado(
     }
 
     @PreDestroy
-    fun shutdown() = scheduler.shutdownNow()
+    fun shutdown() {
+        scheduler.shutdownNow()
+        webhookPool.shutdownNow()
+    }
 }
 
 private class LoteMock(

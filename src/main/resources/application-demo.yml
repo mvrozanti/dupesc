@@ -1,6 +1,8 @@
 dupe:
+  worker:
+    lease-ms: ${DUPE_WORKER_LEASE_MS:15000}
   reconciliacao:
-    intervalo-ms: ${DUPE_RECONCILIACAO_INTERVALO_MS:10000}
-    idade-min-ms: ${DUPE_RECONCILIACAO_IDADE_MIN_MS:30000}
+    intervalo-ms: ${DUPE_RECONCILIACAO_INTERVALO_MS:5000}
+    idade-min-ms: ${DUPE_RECONCILIACAO_IDADE_MIN_MS:5000}
   alerta:
     intervalo-ms: 15000
