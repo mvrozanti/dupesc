@@ -31,6 +31,7 @@ dupe:
   reconciliacao:
     intervalo-ms: ${DUPE_RECONCILIACAO_INTERVALO_MS:300000}
     idade-min-ms: ${DUPE_RECONCILIACAO_IDADE_MIN_MS:1800000}
+    consultas-limite: ${DUPE_RECONCILIACAO_CONSULTAS_LIMITE:12}
   leitor:
     intervalo-ms: ${DUPE_LEITOR_INTERVALO_MS:5000}
     tamanho-pagina: ${DUPE_LEITOR_TAMANHO_PAGINA:1000}

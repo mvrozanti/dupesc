@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import io.dupesc.domain.model.EnvioHandle
 import io.dupesc.domain.model.ProcessamentoEstado
 import io.dupesc.domain.port.RegistradoraException
+import io.dupesc.domain.repository.DlqRepository
 import io.dupesc.domain.repository.LoteEnviado
 import io.dupesc.domain.repository.OperacaoRepository
+import io.dupesc.domain.repository.OrigemDlq
 import io.dupesc.domain.repository.OutboxRepository
 import io.dupesc.domain.repository.TituloRepository
 import io.dupesc.infrastructure.configuration.DupeProperties
@@ -20,6 +22,7 @@ class ReconciliacaoService(
     private val outboxRepository: OutboxRepository,
     private val operacaoRepository: OperacaoRepository,
     private val tituloRepository: TituloRepository,
+    private val dlqRepository: DlqRepository,
     private val registry: RegistradoraRegistry,
     private val advisoryLockManager: AdvisoryLockManager,
     private val properties: DupeProperties,
@@ -47,6 +50,9 @@ class ReconciliacaoService(
         val lotes = operacaoRepository.buscarLotesEnviados(idadeMin)
         var resolvidos = 0
         lotes.forEach { lote ->
+            transactionTemplate.executeWithoutResult {
+                operacaoRepository.incrementarConsultas(lote.operacaoIds)
+            }
             try {
                 val resultado = registry.port(lote.registradora).consultar(EnvioHandle(lote.loteId))
                 when (resultado.statusLote) {
@@ -59,7 +65,20 @@ class ReconciliacaoService(
                 log.warn("consulta do lote {} falhou: {}", lote.loteId, e.message)
             }
         }
+        abandonarPresos()
         return resolvidos
+    }
+
+    private fun abandonarPresos() {
+        val ids = operacaoRepository.buscarEnviadosPresos(properties.reconciliacao.consultasLimite)
+        if (ids.isEmpty()) return
+        transactionTemplate.executeWithoutResult {
+            operacaoRepository.falhaPermanente(ids, "enviado preso alem do limite de consultas")
+            ids.forEach { id ->
+                dlqRepository.inserir(OrigemDlq.OUTBOX, id, "{}", "enviado preso alem do limite de consultas")
+            }
+        }
+        log.warn("{} operacoes ENVIADO presas movidas para DLQ", ids.size)
     }
 
     private fun aplicarItens(lote: LoteEnviado, itens: List<io.dupesc.domain.model.ItemResultado>): Int {

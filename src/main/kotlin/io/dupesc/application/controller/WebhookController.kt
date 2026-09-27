@@ -1,6 +1,7 @@
 package io.dupesc.application.controller
 
 import io.dupesc.application.service.WebhookService
+import io.dupesc.infrastructure.configuration.DupeMetrics
 import io.dupesc.infrastructure.configuration.WebhookAssinatura
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController
 class WebhookController(
     private val webhookService: WebhookService,
     private val assinatura: WebhookAssinatura,
+    private val metrics: DupeMetrics,
 ) {
 
     @PostMapping("/webhook/{registradora}")
@@ -23,6 +25,7 @@ class WebhookController(
         @RequestBody corpo: String,
     ): ResponseEntity<Void> {
         if (!assinatura.valida(registradora, corpo, xSignature)) {
+            metrics.registrarWebhook401()
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
         }
         webhookService.processar(registradora, corpo)

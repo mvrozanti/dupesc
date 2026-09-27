@@ -79,6 +79,10 @@ class CercClient(
 
     private fun falhaDe(res: ClientHttpResponse): RegistradoraException =
         when (res.statusCode.value()) {
+            401 -> {
+                tokenCache = null
+                RegistradoraException("credencial invalida (401)", retryavel = true, naoEsgota = true)
+            }
             423 -> RegistradoraException("fora da janela operacional da CERC", retryavel = true, naoEsgota = true)
             429 -> RegistradoraException("limite de taxa da CERC", retryavel = true, naoEsgota = true)
             in 400..499 -> RegistradoraException("rejeitado pela CERC (HTTP ${res.statusCode.value()})", retryavel = false)

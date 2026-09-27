@@ -15,9 +15,9 @@ Status: **corrigido** (commit) / **planejado** (não começado).
 
 | # | Crítica | Melhoria | Status |
 |---|---|---|---|
-| 4 | Lease vencido reenvia e **perde o lote_id** do primeiro envio (não é só crash — envio > lease) | gravar `lote_id` logo após o POST; `repararLeases` promove ENVIADO quando há `lote_id` | planejado |
-| 5 | Paginação por offset: inserção/remoção no legado desloca a janela e **pula** operações (checkpoint monotônico não revisita) | checkpoint por cursor (`after_id`), não por página | planejado |
-| 6 | DLQ gravada dentro da mesma transação que pode abortar → página inteira perdida | DLQ em segunda transação, após commit dos válidos | planejado |
+| 4 | Lease vencido reenvia e **perde o lote_id** do primeiro envio (não é só crash — envio > lease) | gravar `lote_id` logo após o POST; `repararLeases` promove ENVIADO quando há `lote_id` | corrigido |
+| 5 | Paginação por offset: inserção/remoção no legado desloca a janela e **pula** operações (checkpoint monotônico não revisita) | checkpoint por cursor (`after_id`), não por página | corrigido |
+| 6 | DLQ gravada dentro da mesma transação que pode abortar → página inteira perdida | SAVEPOINT por item (nested) + DLQ em segunda transação | corrigido |
 
 ## C — Retry e estados presos
 

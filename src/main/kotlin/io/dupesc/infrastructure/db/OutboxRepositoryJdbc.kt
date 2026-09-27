@@ -78,27 +78,25 @@ class OutboxRepositoryJdbc(
             .update()
     }
 
-    override fun falhaRetryavel(operacaoIds: List<Long>, atrasoMs: Long, erro: String, zeraTentativas: Boolean) {
+    override fun falhaRetryavel(operacaoIds: List<Long>, atrasoMs: Long, erro: String) {
         jdbc.sql(
             """
             UPDATE outbox SET status = 'PENDENTE',
                               next_attempt_at = now() + make_interval(secs => :atrasoSeg),
                               ultimo_erro = :erro,
                               claimed_by = NULL, claimed_until = NULL,
-                              attempt_count = CASE WHEN :zera THEN 0 ELSE attempt_count END,
                               atualizado_em = now()
             WHERE operacao_id IN (:ids) AND status = 'EM_ENVIO'
             """.trimIndent(),
         )
             .param("atrasoSeg", atrasoMs / 1000.0)
             .param("erro", erro)
-            .param("zera", zeraTentativas)
             .param("ids", operacaoIds)
             .update()
     }
 
     override fun marcarDlq(operacaoIds: List<Long>) {
-        jdbc.sql("UPDATE outbox SET status = 'DLQ', atualizado_em = now() WHERE operacao_id IN (:ids)")
+        jdbc.sql("UPDATE outbox SET status = 'DLQ', atualizado_em = now() WHERE operacao_id IN (:ids) AND status = 'EM_ENVIO'")
             .param("ids", operacaoIds)
             .update()
     }
@@ -151,7 +149,7 @@ class OutboxRepositoryJdbc(
 
     override fun idadePendenteMaisAntigoMs(): Long? =
         jdbc.sql(
-            "SELECT extract(epoch FROM (now() - min(next_attempt_at))) * 1000 FROM outbox WHERE status = 'PENDENTE'",
+            "SELECT extract(epoch FROM (now() - min(criado_em))) * 1000 FROM outbox WHERE status = 'PENDENTE'",
         )
             .query { rs, _ -> rs.getDouble(1).toLong() }
             .optional()

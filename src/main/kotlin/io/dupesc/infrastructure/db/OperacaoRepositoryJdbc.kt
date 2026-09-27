@@ -47,13 +47,26 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
             .update()
     }
 
-    override fun falhaRetryavel(ids: List<Long>, erro: String, zeraTentativas: Boolean) {
+    override fun falhaRetryavel(ids: List<Long>, erro: String) {
         jdbc.sql(
-            "UPDATE operacao SET estado = 'PENDENTE', atualizado_em = now() WHERE id IN (:ids) AND estado = 'EM_ENVIO'",
+            "UPDATE operacao SET estado = 'PENDENTE', ultimo_erro = :erro, atualizado_em = now() WHERE id IN (:ids) AND estado = 'EM_ENVIO'",
         )
+            .param("erro", erro)
             .param("ids", ids)
             .update()
     }
+
+    override fun incrementarConsultas(ids: List<Long>) {
+        jdbc.sql("UPDATE operacao SET consultas = consultas + 1 WHERE id IN (:ids) AND estado = 'ENVIADO'")
+            .param("ids", ids)
+            .update()
+    }
+
+    override fun buscarEnviadosPresos(consultasLimite: Int): List<Long> =
+        jdbc.sql("SELECT id FROM operacao WHERE estado = 'ENVIADO' AND consultas >= :limite")
+            .param("limite", consultasLimite)
+            .query(Long::class.java)
+            .list()
 
     override fun falhaPermanente(ids: List<Long>, erro: String) {
         jdbc.sql(

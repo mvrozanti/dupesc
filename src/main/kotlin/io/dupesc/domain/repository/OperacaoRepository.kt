@@ -17,8 +17,10 @@ interface OperacaoRepository {
     fun inserir(intencaoId: Long, referenciaExterna: String, registradora: String): Long
     fun registrarLote(ids: List<Long>, loteId: String)
     fun marcarEnviado(ids: List<Long>, loteId: String)
-    fun falhaRetryavel(ids: List<Long>, erro: String, zeraTentativas: Boolean = false)
+    fun falhaRetryavel(ids: List<Long>, erro: String)
     fun falhaPermanente(ids: List<Long>, erro: String)
+    fun incrementarConsultas(ids: List<Long>)
+    fun buscarEnviadosPresos(consultasLimite: Int): List<Long>
     fun resetarParaPendente(ids: List<Long>)
     fun marcarRegistrado(id: Long, iud: String): Boolean
     fun marcarRecusado(id: Long, errosJson: String): Boolean

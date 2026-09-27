@@ -76,6 +76,13 @@ class RegistroService(
     ) {
         val ids = validos.map { it.first }
         val payloads = validos.associate { (id, comando) -> id to objectMapper.writeValueAsString(comando) }
+        val mensagem = e.message ?: "erro de envio"
+
+        if (!e.retryavel) {
+            permanente(ids, payloads, mensagem)
+            return
+        }
+
         val esgotados = if (e.naoEsgota) {
             emptyList()
         } else {
@@ -85,21 +92,27 @@ class RegistroService(
         transactionTemplate.executeWithoutResult {
             if (retryaveis.isNotEmpty()) {
                 val atraso = retryPolicy.atrasoMs(claimsPorId[retryaveis.first()]?.attemptCount ?: 1)
-                outboxRepository.falhaRetryavel(retryaveis, atraso, e.message ?: "erro de envio", e.naoEsgota)
-                operacaoRepository.falhaRetryavel(retryaveis, e.message ?: "erro de envio")
+                outboxRepository.falhaRetryavel(retryaveis, atraso, mensagem)
+                operacaoRepository.falhaRetryavel(retryaveis, mensagem)
             }
             if (esgotados.isNotEmpty()) {
-                operacaoRepository.falhaPermanente(esgotados, e.message ?: "erro de envio")
+                operacaoRepository.falhaPermanente(esgotados, mensagem)
                 outboxRepository.marcarDlq(esgotados)
                 esgotados.forEach { id ->
-                    dlqRepository.inserir(OrigemDlq.OUTBOX, id, payloads[id] ?: "{}", "tentativas esgotadas: ${e.message}")
+                    dlqRepository.inserir(OrigemDlq.OUTBOX, id, payloads[id] ?: "{}", "tentativas esgotadas: $mensagem")
                 }
             }
         }
-        log.warn(
-            "envio falhou (retryavel={}): {} retryaveis com atraso, {} na dlq",
-            e.retryavel, retryaveis.size, esgotados.size,
-        )
+        log.warn("envio falhou: {} retryaveis, {} na dlq — {}", retryaveis.size, esgotados.size, mensagem)
+    }
+
+    private fun permanente(ids: List<Long>, payloads: Map<Long, String>, erro: String) {
+        transactionTemplate.executeWithoutResult {
+            operacaoRepository.falhaPermanente(ids, erro)
+            outboxRepository.marcarDlq(ids)
+            ids.forEach { id -> dlqRepository.inserir(OrigemDlq.OUTBOX, id, payloads[id] ?: "{}", erro) }
+        }
+        log.warn("{} operacoes para DLQ (erro permanente): {}", ids.size, erro)
     }
 
     private fun falhaPermanente(ids: List<Long>, erro: String) {

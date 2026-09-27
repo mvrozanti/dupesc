@@ -17,7 +17,7 @@ interface OutboxRepository {
     fun reivindicar(tamanho: Int, podId: String, leaseMs: Long): List<Claim>
     fun buscarComandos(operacaoIds: List<Long>): List<ItemComando>
     fun marcarProcessado(operacaoIds: List<Long>)
-    fun falhaRetryavel(operacaoIds: List<Long>, atrasoMs: Long, erro: String, zeraTentativas: Boolean = false)
+    fun falhaRetryavel(operacaoIds: List<Long>, atrasoMs: Long, erro: String)
     fun marcarDlq(operacaoIds: List<Long>)
     fun reabrir(operacaoIds: List<Long>)
     fun repararLeasesVencidos(): List<Long>
