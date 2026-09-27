@@ -2,7 +2,8 @@
 
 Serviço que **recebe novas duplicatas (push via API)** e **migra o backlog do legado
 (pull)**, registrando cada operação como duplicata escritural numa registradora. POC
-pronta para produção: não perde webhook, não duplica, escala horizontalmente.
+validada — as 5 garantias (não perde, não duplica, escala horizontal) provadas ao vivo;
+hardening em andamento, ver [Dívida conhecida](#dívida-conhecida).
 
 **Estado atual — 1 registradora implementada.** Implementado e validado: **CERC**. A
 abstração multi-registradora está desenhada (port, coluna `registradora`, registry), mas
@@ -95,6 +96,18 @@ Testes: `./gradlew test` — Testcontainers (Postgres 16) + WireMock.
   outbox+CDC. Aqui a fila É o estado: ack = transição de linha na mesma transação.
   Kafka entra **se/quando** houver fan-out real (vários consumidores independentes),
   pendurado no outbox via CDC — nunca no caminho crítico.
+
+## Dívida conhecida
+
+Revisão de arquitetura (Opus) encontrou e corrigiu os bloqueadores de produção (timeouts,
+advisory lock, enum da CERC), perda/duplicação sob operação normal (lease, cursor, DLQ),
+segurança e observabilidade. O registro completo — cada crítica com a melhoria aplicada e
+o status — está em [`docs/revisao-hardening.md`](docs/revisao-hardening.md).
+
+Dívida registrada (não implementada): bisect de lote com poison-pill, cancelamento/
+alteração de duplicata (PATCH/inativar da CERC), timestamp/nonce no HMAC, e a chave
+`(registradora, duplicata_id)` no título — pré-requisito da multi-registradora, aguardando
+a resposta jurídica de roteamento.
 
 ## Próximas fases
 
