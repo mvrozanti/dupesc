@@ -1,0 +1,57 @@
+package io.dupesc.application.service
+
+import com.fasterxml.jackson.databind.ObjectMapper
+import io.dupesc.domain.model.EventoLoteFinalizado
+import io.dupesc.domain.repository.DlqRepository
+import io.dupesc.domain.repository.EventoRepository
+import io.dupesc.domain.repository.OperacaoRepository
+import io.dupesc.domain.repository.OrigemDlq
+import io.dupesc.domain.repository.TituloRepository
+import org.slf4j.LoggerFactory
+import org.springframework.stereotype.Service
+import org.springframework.transaction.support.TransactionTemplate
+
+@Service
+class WebhookService(
+    private val eventoRepository: EventoRepository,
+    private val operacaoRepository: OperacaoRepository,
+    private val tituloRepository: TituloRepository,
+    private val dlqRepository: DlqRepository,
+    private val objectMapper: ObjectMapper,
+    private val transactionTemplate: TransactionTemplate,
+) {
+    private val log = LoggerFactory.getLogger(WebhookService::class.java)
+
+    fun processar(registradora: String, corpo: String) {
+        try {
+            val evento = objectMapper.readValue(corpo, EventoLoteFinalizado::class.java)
+            val novo = transactionTemplate.execute { aplicar(registradora, evento, corpo) } ?: false
+            if (!novo) log.info("webhook {} de {} ja visto, ignorado", evento.eventId, registradora)
+        } catch (e: Exception) {
+            try {
+                dlqRepository.inserir(OrigemDlq.WEBHOOK, null, corpo, "webhook nao processado: ${e.message}")
+                log.warn("webhook de {} para DLQ: {}", registradora, e.message)
+            } catch (e2: Exception) {
+                log.error("webhook de {} nem a DLQ gravou: {}", registradora, e2.message)
+                throw e2
+            }
+        }
+    }
+
+    private fun aplicar(registradora: String, evento: EventoLoteFinalizado, corpo: String): Boolean {
+        val novo = eventoRepository.registrarSeNovo(registradora, evento.eventId, evento.tipo, corpo)
+        if (!novo) return false
+        evento.itensProcessados.forEach { item ->
+            val operacao = operacaoRepository.buscarPorReferencia(item.referenciaExterna) ?: return@forEach
+            if (operacaoRepository.marcarRegistrado(operacao.id, item.iud)) {
+                tituloRepository.inserirSeNovo(item.iud, operacao.duplicataId, operacao.id)
+            }
+        }
+        evento.itensInvalidos.forEach { item ->
+            val referencia = item.referenciaExterna ?: return@forEach
+            val operacao = operacaoRepository.buscarPorReferencia(referencia) ?: return@forEach
+            operacaoRepository.marcarRecusado(operacao.id, objectMapper.writeValueAsString(item.erros))
+        }
+        return true
+    }
+}
