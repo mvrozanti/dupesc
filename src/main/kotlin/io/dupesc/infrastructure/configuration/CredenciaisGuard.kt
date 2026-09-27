@@ -14,6 +14,7 @@ class CredenciaisGuard(properties: DupeProperties, environment: Environment) {
                 "dupe.cerc.client-secret" to properties.cerc.clientSecret,
                 "dupe.cerc.webhook-secret" to properties.cerc.webhookSecret,
                 "dupe.legado.api-key" to properties.legado.apiKey,
+                "dupe.admin.api-key" to properties.admin.apiKey,
             ).filter { (_, valor) -> valor.startsWith("poc-") }
 
             if (suspeitas.isNotEmpty()) {

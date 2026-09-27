@@ -49,6 +49,8 @@ dupe:
   legado:
     base-url: ${DUPE_LEGADO_BASE_URL:http://localhost:8082}
     api-key: ${DUPE_LEGADO_API_KEY:poc-legado}
+  admin:
+    api-key: ${DUPE_ADMIN_API_KEY:poc-admin}
 
 resilience4j:
   circuitbreaker:

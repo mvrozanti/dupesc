@@ -12,6 +12,7 @@ data class DupeProperties(
     val alerta: Alerta = Alerta(),
     val cerc: Cerc = Cerc(),
     val legado: Legado = Legado(),
+    val admin: Admin = Admin(),
     val mock: Mock = Mock(),
 ) {
     data class Mock(val webhookDestino: List<String> = emptyList())
@@ -24,6 +25,7 @@ data class DupeProperties(
         val rateLimitRps: Int = 80,
     )
     data class Legado(val baseUrl: String = "http://localhost:8082", val apiKey: String = "poc-legado")
+    data class Admin(val apiKey: String = "poc-admin")
     data class Worker(val batch: Int = 200, val intervaloMs: Long = 1000, val leaseMs: Long = 600_000)
     data class Retry(val baseMs: Long = 5_000, val capMs: Long = 600_000, val maxAttempts: Int = 5)
     data class Reconciliacao(
