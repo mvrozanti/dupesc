@@ -26,6 +26,7 @@ services:
       DUPE_CERC_WEBHOOK_SECRET: poc-secret
       DUPE_LEGADO_BASE_URL: http://legado-mock:8080
       DUPE_WORKER_BATCH: 200
+      JAVA_TOOL_OPTIONS: -Xmx256m
       DUPE_POD_ID: app-1
     ports:
       - "18091:8080"

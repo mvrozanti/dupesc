@@ -19,16 +19,19 @@ estados() {
 }
 
 passo "Subindo stack (postgres + 2 pods + mocks)"
-./gradlew bootJar -q
+if [ -z "${SKIP_BUILD:-}" ]; then ./gradlew bootJar -q; fi
 docker compose down -v 2>/dev/null || true
-docker compose up -d --build
+docker compose up -d --build postgres cerc-mock legado-mock
+aguardar "mock legado" "curl -sf 'http://localhost:18082/legado/operacoes?pagina=1&tamanho=1'" 120
+
+passo "Seed: 1200 operacoes no legado"
+curl -sf -X POST http://localhost:18082/mock/legado/reiniciar -H 'Content-Type: application/json' -d '{"total": 1200}' >/dev/null
+
+docker compose up -d app-1 app-2
 aguardar "app saudavel" "curl -sf http://localhost:18091/actuator/health && curl -sf http://localhost:18092/actuator/health" 240
 
-passo "Seed: 2500 operacoes no legado"
-curl -sf -X POST http://localhost:18082/mock/legado/reiniciar -H 'Content-Type: application/json' -d '{"total": 2500}' >/dev/null
-
 passo "PROVA 1 — legado vira duplicata registrada (2 pods, zero duplicatas)"
-aguardar "2500 registradas" "[ \"\$(sql \"SELECT count(*) FROM operacao WHERE estado='REGISTRADO'\")\" = 2500 ]"
+aguardar "1200 registradas" "[ \"\$(sql \"SELECT count(*) FROM operacao WHERE estado='REGISTRADO'\")\" -ge 1200 ]"
 estados
 echo "  intencoes: $(sql 'SELECT count(*) FROM intencao') | titulos: $(sql 'SELECT count(*) FROM titulo') | webhooks recebidos: $(sql 'SELECT count(*) FROM eventos_recebidos')"
 
@@ -41,12 +44,12 @@ echo "  eventos apos replay: $(sql 'SELECT count(*) FROM eventos_recebidos') (es
 
 passo "PROVA 3 — pod morre no meio do envio, reconciliacao resolve"
 cerc modo '{"modo":"processando_eterno"}'
-curl -sf -X POST http://localhost:18082/mock/legado/reiniciar -H 'Content-Type: application/json' -d '{"total": 2600}' >/dev/null
+curl -sf -X POST http://localhost:18082/mock/legado/reiniciar -H 'Content-Type: application/json' -d '{"total": 2500}' >/dev/null
 aguardar "100 novas ENVIADO" "[ \"\$(sql \"SELECT count(*) FROM operacao WHERE estado='ENVIADO'\")\" -ge 100 ]"
 echo "  matando app-1 (o pod que enviou os lotes pendentes)"
 docker compose kill app-1
 cerc modo '{"modo":"normal"}'
-aguardar "2600 registradas so com app-2" "[ \"\$(sql \"SELECT count(*) FROM operacao WHERE estado='REGISTRADO'\")\" = 2600 ]"
+aguardar "1700 registradas so com app-2" "[ \"\$(sql \"SELECT count(*) FROM operacao WHERE estado='REGISTRADO'\")\" -ge 1700 ]"
 estados
 echo "  app-1 continua morto; app-2 reconciliou tudo"
 

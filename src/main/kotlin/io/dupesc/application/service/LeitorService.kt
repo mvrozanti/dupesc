@@ -38,6 +38,7 @@ class LeitorService(
         repeat(properties.leitor.maxPaginasPorCiclo) {
             if (operacaoRepository.contarPendentes() >= properties.leitor.maxQueuePendente) return lidas
             val pagina = legadoPort.buscarPagina(paginaAtual + 1, properties.leitor.tamanhoPagina)
+            if (pagina.operacoes.isEmpty()) return lidas
             gravarPagina(pagina)
             lidas += pagina.operacoes.size
             if (!checkpointRepository.avancar(CHECKPOINT_PAGINA, paginaAtual, pagina.pagina)) return lidas

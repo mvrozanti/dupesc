@@ -20,7 +20,7 @@ data class ReiniciarRequest(val total: Int)
 @Profile("mock-legado")
 class MockLegadoController {
 
-    private val total = AtomicInteger(2500)
+    private val total = AtomicInteger(0)
 
     @GetMapping("/legado/operacoes")
     fun operacoes(@RequestParam pagina: Long, @RequestParam tamanho: Int): PaginaLegado {
