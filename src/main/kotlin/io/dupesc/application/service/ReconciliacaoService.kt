@@ -1,0 +1,105 @@
+package io.dupesc.application.service
+
+import com.fasterxml.jackson.databind.ObjectMapper
+import io.dupesc.domain.model.EnvioHandle
+import io.dupesc.domain.model.ProcessamentoEstado
+import io.dupesc.domain.port.RegistradoraException
+import io.dupesc.domain.port.RegistradoraPort
+import io.dupesc.domain.repository.LoteEnviado
+import io.dupesc.domain.repository.OperacaoRepository
+import io.dupesc.domain.repository.OutboxRepository
+import io.dupesc.domain.repository.TituloRepository
+import io.dupesc.infrastructure.configuration.DupeProperties
+import io.dupesc.infrastructure.db.AdvisoryLockManager
+import org.slf4j.LoggerFactory
+import org.springframework.stereotype.Service
+import org.springframework.transaction.support.TransactionTemplate
+import java.time.Instant
+
+@Service
+class ReconciliacaoService(
+    private val outboxRepository: OutboxRepository,
+    private val operacaoRepository: OperacaoRepository,
+    private val tituloRepository: TituloRepository,
+    private val port: RegistradoraPort,
+    private val advisoryLockManager: AdvisoryLockManager,
+    private val properties: DupeProperties,
+    private val objectMapper: ObjectMapper,
+    private val transactionTemplate: TransactionTemplate,
+) {
+    private val log = LoggerFactory.getLogger(ReconciliacaoService::class.java)
+
+    fun executar(): Int? = advisoryLockManager.comLock(LOCK_RECONCILIADOR) {
+        repararLeases()
+        reconciliarEnviados()
+    }
+
+    private fun repararLeases() {
+        val ids = outboxRepository.repararLeasesVencidos()
+        if (ids.isNotEmpty()) log.warn("{} leases de envio expirados reparados", ids.size)
+    }
+
+    private fun reconciliarEnviados(): Int {
+        val idadeMin = Instant.now().minusMillis(properties.reconciliacao.idadeMinMs)
+        val lotes = operacaoRepository.buscarLotesEnviados(idadeMin)
+        var resolvidos = 0
+        lotes.forEach { lote ->
+            try {
+                val resultado = port.consultar(EnvioHandle(lote.loteId))
+                when (resultado.statusLote) {
+                    ProcessamentoEstado.PROCESSANDO -> Unit
+                    ProcessamentoEstado.PROCESSADO -> resolvidos += aplicarItens(lote, resultado.itens)
+                    ProcessamentoEstado.REJEITADO -> resolvidos += aplicarItens(lote, resultado.itens)
+                    ProcessamentoEstado.ERRO -> resetar(lote)
+                }
+            } catch (e: RegistradoraException) {
+                log.warn("consulta do lote {} falhou: {}", lote.loteId, e.message)
+            }
+        }
+        return resolvidos
+    }
+
+    private fun aplicarItens(lote: LoteEnviado, itens: List<io.dupesc.domain.model.ItemResultado>): Int {
+        var resolvidos = 0
+        itens.forEach { item ->
+            val operacao = operacaoRepository.buscarPorReferencia(item.referenciaExterna) ?: return@forEach
+            when (item.estado) {
+                ProcessamentoEstado.PROCESSADO -> {
+                    val iud = item.operationId ?: return@forEach
+                    if (transactionTemplate.execute {
+                            if (operacaoRepository.marcarRegistrado(operacao.id, iud)) {
+                                tituloRepository.inserirSeNovo(iud, operacao.duplicataId, operacao.id)
+                                true
+                            } else {
+                                false
+                            }
+                        } == true
+                    ) {
+                        resolvidos++
+                    }
+                }
+                ProcessamentoEstado.REJEITADO -> {
+                    transactionTemplate.executeWithoutResult {
+                        operacaoRepository.marcarRecusado(operacao.id, objectMapper.writeValueAsString(item.erros))
+                    }
+                    resolvidos++
+                }
+                else -> Unit
+            }
+        }
+        log.info("lote {} reconciliado: {} itens resolvidos", lote.loteId, resolvidos)
+        return resolvidos
+    }
+
+    private fun resetar(lote: LoteEnviado) {
+        transactionTemplate.executeWithoutResult {
+            operacaoRepository.resetarParaPendente(lote.operacaoIds)
+            outboxRepository.reabrir(lote.operacaoIds)
+        }
+        log.warn("lote {} em ERRO: {} operacoes reenfileiradas", lote.loteId, lote.operacaoIds.size)
+    }
+
+    companion object {
+        const val LOCK_RECONCILIADOR = 741002L
+    }
+}
