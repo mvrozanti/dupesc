@@ -13,54 +13,7 @@ multi-registradora funcionando hoje.
 ## Diagramas
 
 Diagramas visuais atualizados (infra, fluxo de dados, pontos de entrada) vivem em
-[`docs/arquitetura.html`](docs/arquitetura.html) — abra no navegador. Abaixo, os
-esqueletos textuais.
-
-### Sequência
-
-```mermaid
-sequenceDiagram
-    participant L as Legado
-    participant PG as Postgres
-    participant W as Worker (pod N)
-    participant C as CERC
-    participant H as Webhook (pod N)
-    participant R as Reconciliador
-    L->>PG: leitor: tx(intencao+operacao+outbox+checkpoint)
-    W->>PG: SKIP LOCKED reivindica lote (EM_ENVIO)
-    W->>C: POST lote (CB + rate limiter)
-    W->>PG: grava lote_id (ENVIADO)
-    C->>H: lote-finalizado (HMAC)
-    H->>PG: tx(dedup event_id + REGISTRADO + titulo)
-    H-->>C: 200
-    R->>C: GET status (ENVIADO > 30min)
-    R->>PG: transições guardadas
-```
-
-### Infraestrutura
-
-```mermaid
-flowchart LR
-    CERC[CERC] <--> LB[ALB + mTLS/WAF]
-    LB --> P[pods dupesc xN]
-    P --> DB[(RDS Postgres 16 Multi-AZ)]
-    S[Secrets Manager] --> P
-    P --> M[CloudWatch/Prometheus]
-    M --> A[Alertas: backlog/DLQ/lag]
-    N[legado interno] --> P
-```
-
-### Caso de uso
-
-```mermaid
-flowchart TD
-    O[Operacao legado FIDC] --> L[Leitor] --> F[Fila transacional outbox] --> E[Lote CERC]
-    E --> I[Escrituracao: IUD] --> T[Titulo registrado] --> W[Webhook confirma] --> D[Duplicata escriturada]
-    E -. falha .-> B[retry backoff] -. esgotou .-> Q[DLQ]
-    E -. pod morto .-> RC[Reconciliador] --> I
-    E -. rejeicao negocio .-> RE[RECUSADO]
-```
-
+[`docs/arquitetura.html`](docs/arquitetura.html) — abra no navegador.
 ## Provisionar em produção
 
 - **Compute**: N pods stateless (ECS Fargate ou K8s Deployment), autoscaling por
