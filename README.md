@@ -67,8 +67,8 @@ flowchart TD
   mTLS + IP allowlist em produção; WAF.
 - **Observabilidade**: Prometheus/Grafana (ou CloudWatch) sobre `/actuator/prometheus`;
   alertar nas métricas do AlertaJob: fila > 10k, item pendente > 15 min, DLQ > 0.
-- **Homologação**: CERC tem produção assistida (mesma grade da homolog); basta trocar
-  `DUPE_CERC_BASE_URL`/`DUPE_CERC_TOKEN_URL` — nenhum código novo.
+- **Ambiente**: a escrituração da CERC hoje opera em produção assistida; trocar de
+  ambiente é só `DUPE_CERC_BASE_URL`/`DUPE_CERC_TOKEN_URL` — nenhum código novo.
 
 ## Padrões
 
@@ -140,6 +140,6 @@ Testes: `./gradlew test` — Testcontainers (Postgres 16) + WireMock.
 
 ## Próximas fases
 
-- Profile `cerc-homolog` (produção assistida da CERC — troca só de env).
+- Profile de ambiente da CERC (produção assistida — troca só de env).
 - B3 RDE (mTLS + OAuth2 + ticket assíncrono) e Núclea C3 (troca de arquivo SPB/XML) como
   novos implementadores de `RegistradoraPort`.
