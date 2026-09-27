@@ -11,6 +11,7 @@ data class OperacaoLinha(
     val estado: EstadoOperacao,
     val intencaoId: Long,
     val duplicataId: Long,
+    val loteId: String?,
 )
 
 interface OperacaoRepository {

@@ -116,7 +116,7 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
     override fun buscarPorReferencia(referenciaExterna: String): OperacaoLinha? =
         jdbc.sql(
             """
-            SELECT o.id, o.referencia_externa, o.estado, o.intencao_id, i.duplicata_id
+            SELECT o.id, o.referencia_externa, o.estado, o.intencao_id, o.lote_id, i.duplicata_id
             FROM operacao o JOIN intencao i ON i.id = o.intencao_id
             WHERE o.referencia_externa = :referencia
             """.trimIndent(),
@@ -128,6 +128,7 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
                 estado = EstadoOperacao.valueOf(rs.getString("estado")),
                 intencaoId = rs.getLong("intencao_id"),
                 duplicataId = rs.getLong("duplicata_id"),
+                loteId = rs.getString("lote_id"),
             ) }
             .optional()
             .orElse(null)

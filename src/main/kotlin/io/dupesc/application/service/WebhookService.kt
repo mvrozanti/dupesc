@@ -2,12 +2,15 @@ package io.dupesc.application.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.dupesc.domain.model.EventoLoteFinalizado
+import io.dupesc.domain.model.ProcessamentoEstado
 import io.dupesc.domain.repository.DlqRepository
 import io.dupesc.domain.repository.EventoRepository
+import io.dupesc.domain.repository.OperacaoLinha
 import io.dupesc.domain.repository.OperacaoRepository
 import io.dupesc.domain.repository.OrigemDlq
 import io.dupesc.domain.repository.TituloRepository
 import org.slf4j.LoggerFactory
+import org.springframework.dao.TransientDataAccessException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 
@@ -27,6 +30,9 @@ class WebhookService(
             val evento = objectMapper.readValue(corpo, EventoLoteFinalizado::class.java)
             val novo = transactionTemplate.execute { aplicar(registradora, evento, corpo) } ?: false
             if (!novo) log.info("webhook {} de {} ja visto, ignorado", evento.eventId, registradora)
+        } catch (e: TransientDataAccessException) {
+            log.warn("falha transitoria de banco no webhook de {} — devolvendo 500 para retry", registradora)
+            throw e
         } catch (e: Exception) {
             try {
                 dlqRepository.inserir(OrigemDlq.WEBHOOK, null, corpo, "webhook nao processado: ${e.message}")
@@ -41,17 +47,40 @@ class WebhookService(
     private fun aplicar(registradora: String, evento: EventoLoteFinalizado, corpo: String): Boolean {
         val novo = eventoRepository.registrarSeNovo(registradora, evento.eventId, evento.tipo, corpo)
         if (!novo) return false
+        when (evento.statusLote) {
+            ProcessamentoEstado.PROCESSADO -> aplicarProcessados(evento)
+            ProcessamentoEstado.REJEITADO -> aplicarInvalidos(evento)
+            else -> Unit
+        }
+        return true
+    }
+
+    private fun aplicarProcessados(evento: EventoLoteFinalizado) {
         evento.itensProcessados.forEach { item ->
             val operacao = operacaoRepository.buscarPorReferencia(item.referenciaExterna) ?: return@forEach
+            validarLote(operacao, evento.loteId)
             if (operacaoRepository.marcarRegistrado(operacao.id, item.iud)) {
                 tituloRepository.inserirSeNovo(item.iud, operacao.duplicataId, operacao.id)
             }
         }
+    }
+
+    private fun aplicarInvalidos(evento: EventoLoteFinalizado) {
         evento.itensInvalidos.forEach { item ->
             val referencia = item.referenciaExterna ?: return@forEach
             val operacao = operacaoRepository.buscarPorReferencia(referencia) ?: return@forEach
+            validarLote(operacao, evento.loteId)
             operacaoRepository.marcarRecusado(operacao.id, objectMapper.writeValueAsString(item.erros))
         }
-        return true
+    }
+
+    private fun validarLote(operacao: OperacaoLinha, loteId: String) {
+        if (operacao.loteId != loteId) {
+            throw WebhookPoisonException(
+                "lote_id $loteId nao confere com ${operacao.loteId} para ${operacao.referenciaExterna}",
+            )
+        }
     }
 }
+
+class WebhookPoisonException(message: String) : RuntimeException(message)
