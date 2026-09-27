@@ -46,8 +46,8 @@ class OutboxRepositoryJdbc(
             .list()
             .also { ids ->
                 if (ids.isNotEmpty()) {
-                    jdbc.sql("UPDATE operacao SET estado = 'EM_ENVIO', atualizado_em = now() WHERE id = ANY (:ids) AND estado = 'PENDENTE'")
-                        .param("ids", ids.map { it.operacaoId }.toTypedArray())
+                    jdbc.sql("UPDATE operacao SET estado = 'EM_ENVIO', atualizado_em = now() WHERE id IN (:ids) AND estado = 'PENDENTE'")
+                        .param("ids", ids.map { it.operacaoId })
                         .update()
                 }
             }
@@ -59,10 +59,10 @@ class OutboxRepositoryJdbc(
             FROM outbox o
             JOIN operacao op ON op.id = o.operacao_id
             JOIN intencao i ON i.id = op.intencao_id
-            WHERE o.operacao_id = ANY (:ids)
+            WHERE o.operacao_id IN (:ids)
             """.trimIndent(),
         )
-            .param("ids", operacaoIds.toTypedArray())
+            .param("ids", operacaoIds)
             .query { rs, _ -> ItemComando(
                 operacaoId = rs.getLong("operacao_id"),
                 referenciaExterna = rs.getString("referencia_externa"),
@@ -72,8 +72,8 @@ class OutboxRepositoryJdbc(
             .list()
 
     override fun marcarProcessado(operacaoIds: List<Long>) {
-        jdbc.sql("UPDATE outbox SET status = 'PROCESSADO', atualizado_em = now() WHERE operacao_id = ANY (:ids) AND status = 'EM_ENVIO'")
-            .param("ids", operacaoIds.toTypedArray())
+        jdbc.sql("UPDATE outbox SET status = 'PROCESSADO', atualizado_em = now() WHERE operacao_id IN (:ids) AND status = 'EM_ENVIO'")
+            .param("ids", operacaoIds)
             .update()
     }
 
@@ -86,27 +86,27 @@ class OutboxRepositoryJdbc(
                               claimed_by = NULL, claimed_until = NULL,
                               attempt_count = CASE WHEN :zera THEN 0 ELSE attempt_count END,
                               atualizado_em = now()
-            WHERE operacao_id = ANY (:ids) AND status = 'EM_ENVIO'
+            WHERE operacao_id IN (:ids) AND status = 'EM_ENVIO'
             """.trimIndent(),
         )
             .param("atrasoSeg", atrasoMs / 1000.0)
             .param("erro", erro)
             .param("zera", zeraTentativas)
-            .param("ids", operacaoIds.toTypedArray())
+            .param("ids", operacaoIds)
             .update()
     }
 
     override fun marcarDlq(operacaoIds: List<Long>) {
-        jdbc.sql("UPDATE outbox SET status = 'DLQ', atualizado_em = now() WHERE operacao_id = ANY (:ids)")
-            .param("ids", operacaoIds.toTypedArray())
+        jdbc.sql("UPDATE outbox SET status = 'DLQ', atualizado_em = now() WHERE operacao_id IN (:ids)")
+            .param("ids", operacaoIds)
             .update()
     }
 
     override fun reabrir(operacaoIds: List<Long>) {
         jdbc.sql(
-            "UPDATE outbox SET status = 'PENDENTE', next_attempt_at = now(), atualizado_em = now() WHERE operacao_id = ANY (:ids) AND status = 'PROCESSADO'",
+            "UPDATE outbox SET status = 'PENDENTE', next_attempt_at = now(), atualizado_em = now() WHERE operacao_id IN (:ids) AND status = 'PROCESSADO'",
         )
-            .param("ids", operacaoIds.toTypedArray())
+            .param("ids", operacaoIds)
             .update()
     }
 
@@ -122,8 +122,8 @@ class OutboxRepositoryJdbc(
             .list()
             .also { ids ->
                 if (ids.isNotEmpty()) {
-                    jdbc.sql("UPDATE operacao SET estado = 'PENDENTE', atualizado_em = now() WHERE id = ANY (:ids) AND estado = 'EM_ENVIO'")
-                        .param("ids", ids.toTypedArray())
+                    jdbc.sql("UPDATE operacao SET estado = 'PENDENTE', atualizado_em = now() WHERE id IN (:ids) AND estado = 'EM_ENVIO'")
+                        .param("ids", ids)
                         .update()
                 }
             }

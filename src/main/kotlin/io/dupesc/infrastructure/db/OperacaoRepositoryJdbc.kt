@@ -29,19 +29,19 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
         jdbc.sql(
             """
             UPDATE operacao SET estado = 'ENVIADO', lote_id = :lote, enviado_em = now(), atualizado_em = now()
-            WHERE id = ANY (:ids) AND estado = 'EM_ENVIO'
+            WHERE id IN (:ids) AND estado = 'EM_ENVIO'
             """.trimIndent(),
         )
             .param("lote", loteId)
-            .param("ids", ids.toTypedArray())
+            .param("ids", ids)
             .update()
     }
 
     override fun falhaRetryavel(ids: List<Long>, erro: String, zeraTentativas: Boolean) {
         jdbc.sql(
-            "UPDATE operacao SET estado = 'PENDENTE', atualizado_em = now() WHERE id = ANY (:ids) AND estado = 'EM_ENVIO'",
+            "UPDATE operacao SET estado = 'PENDENTE', atualizado_em = now() WHERE id IN (:ids) AND estado = 'EM_ENVIO'",
         )
-            .param("ids", ids.toTypedArray())
+            .param("ids", ids)
             .update()
     }
 
@@ -49,20 +49,20 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
         jdbc.sql(
             """
             UPDATE operacao SET estado = 'FALHA_PERMANENTE', erros = CAST(:erros AS jsonb), atualizado_em = now()
-            WHERE id = ANY (:ids) AND estado IN (:estados)
+            WHERE id IN (:ids) AND estado IN (:estados)
             """.trimIndent(),
         )
             .param("erros", erro)
-            .param("ids", ids.toTypedArray())
+            .param("ids", ids)
             .param("estados", estadosSql(EventoOperacao.FalhaPermanente("")))
             .update()
     }
 
     override fun resetarParaPendente(ids: List<Long>) {
         jdbc.sql(
-            "UPDATE operacao SET estado = 'PENDENTE', lote_id = NULL, atualizado_em = now() WHERE id = ANY (:ids) AND estado = 'ENVIADO'",
+            "UPDATE operacao SET estado = 'PENDENTE', lote_id = NULL, atualizado_em = now() WHERE id IN (:ids) AND estado = 'ENVIADO'",
         )
-            .param("ids", ids.toTypedArray())
+            .param("ids", ids)
             .update()
     }
 
@@ -130,6 +130,6 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
             .query(Long::class.java)
             .single()!!
 
-    private fun estadosSql(evento: EventoOperacao): Array<String> =
-        StateMachine.origens(evento).map { it.name }.toTypedArray()
+    private fun estadosSql(evento: EventoOperacao): Set<String> =
+        StateMachine.origens(evento).map { it.name }.toSet()
 }

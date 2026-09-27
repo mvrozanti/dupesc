@@ -6,5 +6,5 @@ import org.springframework.scheduling.annotation.EnableScheduling
 
 @Configuration
 @EnableScheduling
-@ConditionalOnProperty(name = "dupe.scheduling.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = ["dupe.scheduling.enabled"], havingValue = "true", matchIfMissing = true)
 class SchedulerConfig

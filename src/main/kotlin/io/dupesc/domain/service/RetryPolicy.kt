@@ -6,7 +6,7 @@ import kotlin.random.Random
 class RetryPolicy(
     private val baseMs: Long,
     private val capMs: Long,
-    private val maxAttempts: Int,
+    val maxAttempts: Int,
     private val random: Random = Random.Default,
 ) {
     fun atrasoMs(attempt: Int): Long {

@@ -38,6 +38,7 @@ data class LoteVisual(
 class MockCercEstado(
     properties: DupeProperties,
     private val objectMapper: ObjectMapper,
+    builder: RestClient.Builder,
 ) {
     private val log = LoggerFactory.getLogger(MockCercEstado::class.java)
     private val scheduler = Executors.newSingleThreadScheduledExecutor {
@@ -45,7 +46,7 @@ class MockCercEstado(
     }
     private val secret = properties.cerc.webhookSecret
     private val destinos = properties.mock.webhookDestino
-    private val client = RestClient.create()
+    private val client = builder.build()
     private val contador = AtomicInteger()
     private val lotes = ConcurrentHashMap<String, LoteMock>()
     private val webhooksEnviados = ConcurrentHashMap<String, String>()

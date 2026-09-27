@@ -3,11 +3,20 @@ package io.dupesc.infrastructure.configuration
 import io.dupesc.domain.service.RetryPolicy
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.web.client.RestClient
+import java.net.http.HttpClient
 
 @Configuration
 class BeansConfig {
+
+    @Bean
+    fun restClientBuilder(): RestClient.Builder {
+        val httpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()
+        return RestClient.builder().requestFactory(JdkClientHttpRequestFactory(httpClient))
+    }
 
     @Bean
     fun transactionTemplate(transactionManager: PlatformTransactionManager): TransactionTemplate =

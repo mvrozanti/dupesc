@@ -1,8 +1,11 @@
 package io.dupesc.domain.model
 
+import com.fasterxml.jackson.databind.PropertyNamingStrategies
+import com.fasterxml.jackson.databind.annotation.JsonNaming
 import java.math.BigDecimal
 import java.time.LocalDate
 
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class OperacaoLegado(
     val id: String,
     val duplicataId: Long?,
@@ -17,12 +20,14 @@ data class OperacaoLegado(
     val informacoesPagamento: InformacoesPagamentoLegado?,
 )
 
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class InformacoesPagamentoLegado(
     val tipoInstrumento: String?,
     val iban: String?,
     val chavePix: String?,
 )
 
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class PaginaLegado(
     val pagina: Long,
     val temMais: Boolean,

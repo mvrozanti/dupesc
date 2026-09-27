@@ -15,6 +15,8 @@ data class EventoLoteFinalizado(
     val itensInvalidos: List<ItemInvalido> = emptyList(),
 )
 
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class ItemProcessado(val referenciaExterna: String, val iud: String)
 
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class ItemInvalido(val referenciaExterna: String?, val erros: List<ErroRegistradora>)
