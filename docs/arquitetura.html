@@ -145,7 +145,9 @@
     <div class="eyebrow">Infraestrutura</div>
     <h2>O que provisionamos</h2>
     <p class="caption">Um binário em N pods, um Postgres multi-AZ, ALB com mTLS para os
-    webhooks. Duas pontas externas: CERC e o sistema legado.</p>
+    webhooks. Não há broker: a fila é transacional (outbox) e mora no Postgres — os pods
+    não conversam entre si. Duas portas de ingestão: push de novas duplicatas e pull da
+    migração.</p>
     <div class="slide">
 <pre class="mermaid">
 flowchart LR
@@ -159,12 +161,12 @@ flowchart LR
   end
   subgraph aws["AWS"]
     alb("ALB · mTLS")
-    rds[("Postgres 16&lt;br/&gt;multi-AZ")]
-    sm("Secrets Manager&lt;br/&gt;OAuth2 · HMAC")
+    rds[("Postgres 16 · multi-AZ&lt;br/&gt;outbox = fila · sem broker")]
+    sm("Secrets Manager&lt;br/&gt;OAuth2 · HMAC · API key")
   end
 
-  pod --&gt;|"puxa páginas · 1000/pág"| legado
-  legado -.-&gt;|"push · planejado"| pod
+  pod --&gt;|"pull · migração · 1000/pág"| legado
+  legado --&gt;|"push · novas duplicatas"| pod
   pod ==&gt;|"1 tx: intenção+operação+outbox"| rds
   pod --&gt;|"POST lote · OAuth2"| cerc
   cerc --&gt;|"webhook · mTLS"| alb
@@ -188,7 +190,8 @@ flowchart LR
   <section>
     <div class="eyebrow">Fluxo dos dados</div>
     <h2>Ida, volta e reparo</h2>
-    <p class="caption">A ida grava antes de agir; a volta é deduplicada e aplicada numa
+    <p class="caption">Duas portas de ingestão — push de novas duplicatas e pull da
+    migração — deságuam na mesma transação. A volta é deduplicada e aplicada numa
     transação; o reconciliador conserta o que ficou pendurado.</p>
     <div class="slide">
 <pre class="mermaid">
@@ -206,6 +209,7 @@ flowchart LR
   end
   subgraph o3["3 · processo"]
     leitor("LeitorJob&lt;br/&gt;lock 741001")
+    api("POST /api/legado/operacoes")
     worker("OutboxWorker&lt;br/&gt;SKIP LOCKED · CB · rate limiter")
     reconcil("ReconciliadorJob&lt;br/&gt;lock 741002 · 5min")
     webhook("WebhookController")
@@ -214,8 +218,10 @@ flowchart LR
     cerc{{"CERC"}}
   end
 
-  legado --&gt;|"páginas · checkpoint"| leitor
+  legado --&gt;|"pull · migração · checkpoint"| leitor
+  legado --&gt;|"push · novas duplicatas"| api
   leitor ==&gt;|"1 tx: intenção+operação+outbox"| outbox
+  api ==&gt;|"1 tx: intenção+operação+outbox"| outbox
   outbox --&gt;|"claim ≤200 · SKIP LOCKED"| worker
   worker --&gt;|"POST lote"| cerc
   worker ==&gt;|"ENVIADO"| operacao
@@ -237,7 +243,7 @@ flowchart LR
   classDef err fill:#ffebee,stroke:#c62828,stroke-width:2px
   class legado,cerc extc
   class intencao,operacao,outbox,titulo,eventos db
-  class leitor,worker,reconcil,webhook app
+  class leitor,api,worker,reconcil,webhook app
   class dlq err
 </pre>
     </div>
@@ -246,20 +252,21 @@ flowchart LR
   <section>
     <div class="eyebrow">Pontos de entrada</div>
     <h2>Quem chama, e o que cada porta entrega</h2>
-    <p class="caption">Cinco portas, cada uma com a própria garantia. Tracejado é o que
-    ainda não foi construído.</p>
+    <p class="caption">Cinco portas, cada uma com a própria garantia. Duas ingestões —
+    push de novas duplicatas e pull da migração — deságuam na mesma transação. Tracejado
+    é o que ainda não foi construído.</p>
     <div class="slide">
 <pre class="mermaid">
 flowchart TD
   inicio{"quem inicia?"}
 
-  inicio --&gt;|"job interno"| leitor[/"LeitorJob · puxa páginas"/]
+  inicio --&gt;|"migração · backlog"| leitor[/"LeitorJob · pull de páginas"/]
   leitor --&gt; tx1["1 tx: intenção+operação+outbox"]
   tx1 --&gt; g1(("não perde ·&lt;br/&gt;resume do checkpoint"))
 
-  inicio -.-&gt;|"legado · push"| push[/"POST /api/legado/operacoes"/]:::plan
-  push -.-&gt; tx2["gravarOperação · 1 tx&lt;br/&gt;mesmo caminho do leitor"]:::plan
-  tx2 -.-&gt; g2(("não perde ·&lt;br/&gt;não duplica")):::plan
+  inicio --&gt;|"novas duplicatas · push"| push[/"POST /api/legado/operacoes"/]
+  push --&gt; tx2["gravarOperação · 1 tx&lt;br/&gt;mesmo caminho do leitor"]
+  tx2 --&gt; g2(("não perde ·&lt;br/&gt;não duplica"))
 
   inicio --&gt;|"registradora"| wh[/"POST /webhook/{registradora}"/]
   wh --&gt; hmac{"HMAC válido?"}
@@ -284,9 +291,9 @@ flowchart TD
   classDef dec fill:#fff,stroke:#455a64,stroke-width:2px
   classDef gar fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
   classDef err fill:#ffebee,stroke:#c62828,stroke-width:2px
-  class leitor,wh,met,tx1,tx3,al app
+  class leitor,push,tx2,wh,met,tx1,tx3,al app
   class inicio,hmac,dup dec
-  class g1,g401,g4,g5,g3,g7 gar
+  class g1,g2,g401,g4,g5,g3,g7 gar
   class dlq err
 </pre>
     </div>
@@ -300,7 +307,7 @@ flowchart TD
       <li><span class="n">3</span><span>Ida: SKIP LOCKED — cada operação sai com um pod só, não duplica.</span></li>
       <li><span class="n">4</span><span>Volta: webhook deduplicado por event_id e aplicado numa transação — exatamente-uma-vez.</span></li>
       <li><span class="n">5</span><span>Erro vira linha na dlq com o payload inteiro; a registradora sempre recebe 200.</span></li>
-      <li><span class="n">6</span><span>O tracejado é planejado — e o push reusa o caminho do leitor.</span></li>
+      <li><span class="n">6</span><span>Duas portas de ingestão: push para as novas duplicatas, pull para a migração — deságuam na mesma transação. E não há broker: a fila é o outbox no Postgres.</span></li>
     </ol>
   </div>
 </div>
