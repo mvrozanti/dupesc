@@ -45,6 +45,10 @@ class MockLegadoController {
         return OperacaoLegado(
             id = "OP-$n",
             duplicataId = n,
+            tipo = "MERC",
+            numeroFatura = "NF-$n",
+            parcela = 1,
+            assinatura = "assinatura-teste",
             emissao = emissao,
             vencimento = emissao.plusDays(30),
             valor = BigDecimal("1000.00").add(BigDecimal(n)),

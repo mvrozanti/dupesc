@@ -23,22 +23,22 @@ Status: **corrigido** (commit) / **planejado** (não começado).
 
 | # | Crítica | Melhoria | Status |
 |---|---|---|---|
-| 7 | `retryavel` é flag morta — 4xx é retentado 5× antes da DLQ; 401 despeja a fila | decidir por `retryavel` (4xx→DLQ imediata); 401 invalida token cacheado | planejado |
-| 8 | `PROCESSANDO` eterno e lote REJEITADO vazio ficam ENVIADO para sempre, martelando a CERC; `idadePendente` mede `next_attempt_at` (negativo com backoff); zero métricas | contador de consultas + prazo-limite→DLQ; idade por `criado_em`; gauges Micrometer | planejado |
-| 9 | `falhaRetryavel` descarta `erro`; `marcarDlq` sem guarda | gravar `ultimo_erro`; guarda de estado | planejado |
+| 7 | `retryavel` é flag morta — 4xx é retentado 5× antes da DLQ; 401 despeja a fila | decidir por `retryavel` (4xx→DLQ imediata); 401 invalida token cacheado | corrigido |
+| 8 | `PROCESSANDO` eterno e lote REJEITADO vazio ficam ENVIADO para sempre, martelando a CERC; `idadePendente` mede `next_attempt_at` (negativo com backoff); zero métricas | contador de consultas + limite→DLQ; idade por `criado_em`; gauges Micrometer | corrigido |
+| 9 | `falhaRetryavel` descarta `erro`; `marcarDlq` sem guarda | gravar `ultimo_erro`; guarda de estado | corrigido |
 
 ## D — Taxa/concorrência
 
 | # | Crítica | Melhoria | Status |
 |---|---|---|---|
-| 10 | Rate limiter in-process → N pods = N×80 rps contra a CERC; autoscaling aumenta pressão no gargalo | token bucket no Postgres (`rate_limit`), teto global | planejado |
+| 10 | Rate limiter in-process → N pods = N×80 rps contra a CERC; autoscaling aumenta pressão no gargalo | token bucket no Postgres (`rate_limit`), teto global | corrigido |
 
 ## E — Segurança
 
 | # | Crítica | Melhoria | Status |
 |---|---|---|---|
-| 11 | Secrets com default `poc-*` que valem em produção, sem fail-fast | guard que aborta o boot fora de `demo/test/mock-*` | planejado |
-| 12 | Webhook não valida `lote_id`; `statusLote` é lido e ignorado; 200 em falha transitória troca retry por trabalho manual | validar `lote_id`, usar `statusLote`, 500 em falha transitória | planejado |
+| 11 | Secrets com default `poc-*` que valem em produção, sem fail-fast | guard que aborta o boot fora de `demo/test/mock-*` | corrigido |
+| 12 | Webhook não valida `lote_id`; `statusLote` é lido e ignorado; 200 em falha transitória troca retry por trabalho manual | validar `lote_id`, usar `statusLote`, 500 em falha transitória | corrigido |
 
 ## F — Domínio/compliance
 

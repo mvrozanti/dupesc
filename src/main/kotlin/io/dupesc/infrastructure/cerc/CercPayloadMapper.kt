@@ -8,16 +8,16 @@ object CercPayloadMapper {
 
     fun item(comando: RegistroComando): Map<String, Any?> = mapOf(
         "referencia_externa" to comando.referenciaExterna,
-        "tipo" to "MERC",
+        "tipo" to comando.tipo,
         "identificador" to mapOf(
-            "fatura" to comando.referenciaExterna.take(60),
-            "parcela" to 1,
+            "fatura" to comando.numeroFatura,
+            "parcela" to comando.parcela,
         ),
         "partes" to mapOf(
             "sacador" to mapOf(
                 "documento" to comando.sacador.documento,
                 "razao_social" to comando.sacador.nome,
-                "assinatura" to "S",
+                "assinatura" to comando.assinatura,
             ),
             "sacado" to mapOf(
                 "documento" to comando.sacado.documento,

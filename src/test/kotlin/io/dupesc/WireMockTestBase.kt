@@ -100,7 +100,8 @@ abstract class WireMockTestBase : PostgresTestBase() {
 
     protected fun corpoLegado(ids: List<Long>): String =
         ids.joinToString(prefix = "[", postfix = "]") { id ->
-            """{"id":"OP-$id","duplicata_id":$id,"emissao":"2026-01-01","vencimento":"2026-02-01","valor":1000.00,""" +
+            """{"id":"OP-$id","duplicata_id":$id,"tipo":"MERC","numero_fatura":"NF-$id","parcela":1,"assinatura":"assinatura-teste",""" +
+                """"emissao":"2026-01-01","vencimento":"2026-02-01","valor":1000.00,""" +
                 """"sacador_documento":"31619393000140","sacador_nome":"FIDC Gestora Ltda",""" +
                 """"sacado_documento":"39053344705","sacado_nome":"Sacado $id","sacado_email":"s$id@example.com",""" +
                 """"informacoes_pagamento":{"tipo_instrumento":"PPIX","chave_pix":"s$id@example.com"}}"""

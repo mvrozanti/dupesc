@@ -13,6 +13,13 @@ object Canonicalizador {
 
     fun de(operacao: OperacaoLegado, referenciaExterna: String): RegistroComando {
         val duplicataId = operacao.duplicataId ?: throw DadoInvalidoException("duplicataId ausente")
+        val tipo = operacao.tipo?.uppercase()?.takeIf { it in setOf("MERC", "SERV") }
+            ?: throw DadoInvalidoException("tipo ausente ou invalido")
+        val numeroFatura = operacao.numeroFatura?.takeIf { it.isNotBlank() && it.length <= 60 }
+            ?: throw DadoInvalidoException("numero da fatura ausente ou invalido")
+        val parcela = operacao.parcela?.takeIf { it >= 1 } ?: throw DadoInvalidoException("parcela ausente ou invalida")
+        val assinatura = operacao.assinatura?.takeIf { it.isNotBlank() }
+            ?: throw DadoInvalidoException("assinatura do sacador ausente")
         val emissao = operacao.emissao ?: throw DadoInvalidoException("emissao ausente")
         val vencimento = operacao.vencimento ?: throw DadoInvalidoException("vencimento ausente")
         val valor = operacao.valor ?: throw DadoInvalidoException("valor ausente")
@@ -25,9 +32,13 @@ object Canonicalizador {
         return RegistroComando(
             referenciaExterna = referenciaExterna,
             duplicataId = duplicataId,
+            tipo = tipo,
+            numeroFatura = numeroFatura,
+            parcela = parcela,
+            assinatura = assinatura,
             emissao = emissao,
             vencimento = vencimento,
-            valor = valor,
+            valor = valor.setScale(2, java.math.RoundingMode.HALF_UP),
             sacador = sacador,
             sacado = sacado,
             informacoesPagamento = InformacoesPagamento(

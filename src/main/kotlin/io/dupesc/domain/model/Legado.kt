@@ -9,6 +9,10 @@ import java.time.LocalDate
 data class OperacaoLegado(
     val id: String,
     val duplicataId: Long?,
+    val tipo: String?,
+    val numeroFatura: String?,
+    val parcela: Int?,
+    val assinatura: String?,
     val emissao: LocalDate?,
     val vencimento: LocalDate?,
     val valor: BigDecimal?,

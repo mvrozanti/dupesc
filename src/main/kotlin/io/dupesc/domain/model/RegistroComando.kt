@@ -19,6 +19,10 @@ data class InformacoesPagamento(
 data class RegistroComando(
     val referenciaExterna: String,
     val duplicataId: Long,
+    val tipo: String,
+    val numeroFatura: String,
+    val parcela: Int,
+    val assinatura: String,
     val emissao: LocalDate,
     val vencimento: LocalDate,
     val valor: BigDecimal,
