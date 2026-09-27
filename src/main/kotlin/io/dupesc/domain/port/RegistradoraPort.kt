@@ -9,4 +9,8 @@ interface RegistradoraPort {
     fun consultar(handle: EnvioHandle): ConsultaResultado
 }
 
-class RegistradoraException(message: String, val retryavel: Boolean) : RuntimeException(message)
+class RegistradoraException(
+    message: String,
+    val retryavel: Boolean,
+    val naoEsgota: Boolean = false,
+) : RuntimeException(message)
