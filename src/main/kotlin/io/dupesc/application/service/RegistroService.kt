@@ -3,9 +3,9 @@ package io.dupesc.application.service
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.dupesc.domain.model.RegistroComando
 import io.dupesc.domain.port.RegistradoraException
-import io.dupesc.domain.port.RegistradoraPort
 import io.dupesc.domain.repository.Claim
 import io.dupesc.domain.repository.DlqRepository
+import io.dupesc.domain.repository.ItemComando
 import io.dupesc.domain.repository.OperacaoRepository
 import io.dupesc.domain.repository.OrigemDlq
 import io.dupesc.domain.repository.OutboxRepository
@@ -22,7 +22,7 @@ class RegistroService(
     private val outboxRepository: OutboxRepository,
     private val operacaoRepository: OperacaoRepository,
     private val dlqRepository: DlqRepository,
-    private val port: RegistradoraPort,
+    private val registry: RegistradoraRegistry,
     private val retryPolicy: RetryPolicy,
     private val properties: DupeProperties,
     private val objectMapper: ObjectMapper,
@@ -37,6 +37,13 @@ class RegistroService(
         if (claims.isEmpty()) return
 
         val itens = outboxRepository.buscarComandos(claims.map { it.operacaoId })
+        val claimsPorId = claims.associateBy { it.operacaoId }
+        itens.groupBy { it.registradora.uppercase() }.forEach { (registradora, grupo) ->
+            processarGrupo(grupo, registradora, claimsPorId)
+        }
+    }
+
+    private fun processarGrupo(itens: List<ItemComando>, registradora: String, claimsPorId: Map<Long, Claim>) {
         val validos = mutableListOf<Pair<Long, RegistroComando>>()
         itens.forEach { item ->
             try {
@@ -48,14 +55,14 @@ class RegistroService(
         if (validos.isEmpty()) return
 
         try {
-            val handle = port.enviar(validos.map { it.second })
+            val handle = registry.port(registradora).enviar(validos.map { it.second })
             transactionTemplate.executeWithoutResult {
                 operacaoRepository.marcarEnviado(validos.map { it.first }, handle.id)
                 outboxRepository.marcarProcessado(validos.map { it.first })
             }
-            log.info("lote {} enviado com {} operacoes pelo pod {}", handle.id, validos.size, properties.podId)
+            log.info("lote {} enviado com {} operacoes para {} pelo pod {}", handle.id, validos.size, registradora, properties.podId)
         } catch (e: RegistradoraException) {
-            tratarFalhaEnvio(validos, claims.associateBy { it.operacaoId }, e)
+            tratarFalhaEnvio(validos, claimsPorId, e)
         }
     }
 

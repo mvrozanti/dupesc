@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import io.dupesc.domain.model.EnvioHandle
 import io.dupesc.domain.model.ProcessamentoEstado
 import io.dupesc.domain.port.RegistradoraException
-import io.dupesc.domain.port.RegistradoraPort
 import io.dupesc.domain.repository.LoteEnviado
 import io.dupesc.domain.repository.OperacaoRepository
 import io.dupesc.domain.repository.OutboxRepository
@@ -21,7 +20,7 @@ class ReconciliacaoService(
     private val outboxRepository: OutboxRepository,
     private val operacaoRepository: OperacaoRepository,
     private val tituloRepository: TituloRepository,
-    private val port: RegistradoraPort,
+    private val registry: RegistradoraRegistry,
     private val advisoryLockManager: AdvisoryLockManager,
     private val properties: DupeProperties,
     private val objectMapper: ObjectMapper,
@@ -45,7 +44,7 @@ class ReconciliacaoService(
         var resolvidos = 0
         lotes.forEach { lote ->
             try {
-                val resultado = port.consultar(EnvioHandle(lote.loteId))
+                val resultado = registry.port(lote.registradora).consultar(EnvioHandle(lote.loteId))
                 when (resultado.statusLote) {
                     ProcessamentoEstado.PROCESSANDO -> Unit
                     ProcessamentoEstado.PROCESSADO -> resolvidos += aplicarItens(lote, resultado.itens)

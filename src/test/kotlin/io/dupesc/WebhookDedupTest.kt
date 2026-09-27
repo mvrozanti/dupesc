@@ -41,7 +41,7 @@ class WebhookDedupTest : WireMockTestBase() {
         jdbcTemplate.update("TRUNCATE checkpoint, intencao, operacao, outbox, titulo, eventos_recebidos, dlq")
         transactionTemplate.executeWithoutResult {
             val intencaoId = intencaoRepository.inserirSeNovo("OP-0", 0L, """{"id":"OP-0"}""")!!
-            val operacaoId = operacaoRepository.inserir(intencaoId, ReferenciaExterna.de("OP-0"))
+            val operacaoId = operacaoRepository.inserir(intencaoId, ReferenciaExterna.de("OP-0"), "CERC")
             outboxRepository.inserir(operacaoId)
             outboxRepository.reivindicar(1, "teste", 60_000)
             operacaoRepository.marcarEnviado(listOf(operacaoId), "lote-1")

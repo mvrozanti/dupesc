@@ -3,6 +3,7 @@ package io.dupesc.application.service
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.dupesc.domain.model.OperacaoLegado
 import io.dupesc.domain.model.PaginaLegado
+import io.dupesc.domain.model.Registradoras
 import io.dupesc.domain.port.LegacyPort
 import io.dupesc.domain.repository.CheckpointRepository
 import io.dupesc.domain.repository.DlqRepository
@@ -72,7 +73,7 @@ class LeitorService(
             duplicataId = duplicataId,
             dadosJson = objectMapper.writeValueAsString(operacao),
         ) ?: return
-        val operacaoId = operacaoRepository.inserir(intencaoId, ReferenciaExterna.de(operacao.id))
+        val operacaoId = operacaoRepository.inserir(intencaoId, ReferenciaExterna.de(operacao.id), Registradoras.CERC)
         outboxRepository.inserir(operacaoId)
     }
 

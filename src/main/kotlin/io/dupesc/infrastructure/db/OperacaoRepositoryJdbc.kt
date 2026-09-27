@@ -16,12 +16,13 @@ import java.time.ZoneOffset
 @Repository
 class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository {
 
-    override fun inserir(intencaoId: Long, referenciaExterna: String): Long =
+    override fun inserir(intencaoId: Long, referenciaExterna: String, registradora: String): Long =
         jdbc.sql(
-            "INSERT INTO operacao (intencao_id, referencia_externa) VALUES (:intencao, :referencia) RETURNING id",
+            "INSERT INTO operacao (intencao_id, referencia_externa, registradora) VALUES (:intencao, :referencia, :registradora) RETURNING id",
         )
             .param("intencao", intencaoId)
             .param("referencia", referenciaExterna)
+            .param("registradora", registradora)
             .query(Long::class.java)
             .single()!!
 
@@ -112,16 +113,16 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
     override fun buscarLotesEnviados(idadeMin: Instant): List<LoteEnviado> =
         jdbc.sql(
             """
-            SELECT lote_id, array_agg(id ORDER BY id) AS ids
+            SELECT registradora, lote_id, array_agg(id ORDER BY id) AS ids
             FROM operacao
             WHERE estado = 'ENVIADO' AND lote_id IS NOT NULL AND enviado_em < :idadeMin
-            GROUP BY lote_id
+            GROUP BY registradora, lote_id
             """.trimIndent(),
         )
             .param("idadeMin", OffsetDateTime.ofInstant(idadeMin, ZoneOffset.UTC))
             .query { rs, _ ->
                 val ids = (rs.getArray("ids").array as Array<*>).map { (it as Number).toLong() }
-                LoteEnviado(rs.getString("lote_id"), ids)
+                LoteEnviado(rs.getString("registradora"), rs.getString("lote_id"), ids)
             }
             .list()
 

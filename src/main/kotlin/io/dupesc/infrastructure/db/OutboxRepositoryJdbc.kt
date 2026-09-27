@@ -55,7 +55,7 @@ class OutboxRepositoryJdbc(
     override fun buscarComandos(operacaoIds: List<Long>): List<ItemComando> =
         jdbc.sql(
             """
-            SELECT o.id AS operacao_id, op.referencia_externa, i.duplicata_id, i.dados::text AS dados
+            SELECT o.id AS operacao_id, op.referencia_externa, op.registradora, i.duplicata_id, i.dados::text AS dados
             FROM outbox o
             JOIN operacao op ON op.id = o.operacao_id
             JOIN intencao i ON i.id = op.intencao_id
@@ -67,6 +67,7 @@ class OutboxRepositoryJdbc(
                 operacaoId = rs.getLong("operacao_id"),
                 referenciaExterna = rs.getString("referencia_externa"),
                 duplicataId = rs.getLong("duplicata_id"),
+                registradora = rs.getString("registradora"),
                 operacaoLegado = objectMapper.readValue(rs.getString("dados"), OperacaoLegado::class.java),
             ) }
             .list()

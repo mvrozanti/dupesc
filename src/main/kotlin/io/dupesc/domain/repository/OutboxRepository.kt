@@ -8,6 +8,7 @@ data class ItemComando(
     val operacaoId: Long,
     val referenciaExterna: String,
     val duplicataId: Long,
+    val registradora: String,
     val operacaoLegado: OperacaoLegado,
 )
 
