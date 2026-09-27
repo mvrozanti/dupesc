@@ -65,14 +65,18 @@ class MockCercEstado(
         return id
     }
 
-    fun statusDe(id: String): StatusLote = lotes[id]?.let { lote ->
-        StatusLote(
+    fun statusDe(id: String): StatusLote {
+        val lote = lotes[id] ?: return StatusLote(id = id, status = "ERRO")
+        if (lote.status == "PROCESSANDO" && modo != ModoMock.PROCESSANDO_ETERNO) {
+            processar(id)
+        }
+        return StatusLote(
             id = id,
             status = lote.status,
             lista_itens_processados = lote.processados,
             lista_itens_invalidos = lote.invalidados,
         )
-    } ?: StatusLote(id = id, status = "ERRO")
+    }
 
     fun visual(): List<LoteVisual> = lotes.values.map {
         LoteVisual(it.idLote, it.status, it.itens, it.invalidosJson())
@@ -86,6 +90,7 @@ class MockCercEstado(
 
     private fun processar(id: String) {
         val lote = lotes[id] ?: return
+        if (lote.status != "PROCESSANDO") return
         if (modo == ModoMock.PROCESSANDO_ETERNO) return
         lote.processar(referenciaRejeitada)
         val payload = lote.webhookPayload()

@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: dupesc
+      POSTGRES_USER: dupesc
+      POSTGRES_PASSWORD: dupesc
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dupesc"]
+      interval: 5s
+      retries: 10
+
+  app-1: &app
+    build: .
+    environment: &app-env
+      SPRING_PROFILES_ACTIVE: demo
+      DUPE_DB_URL: jdbc:postgresql://postgres:5432/dupesc
+      DUPE_DB_USER: dupesc
+      DUPE_DB_PASSWORD: dupesc
+      DUPE_CERC_BASE_URL: http://cerc-mock:8080
+      DUPE_CERC_TOKEN_URL: http://cerc-mock:8080/oauth/token
+      DUPE_CERC_WEBHOOK_SECRET: poc-secret
+      DUPE_LEGADO_BASE_URL: http://legado-mock:8080
+      DUPE_WORKER_BATCH: 200
+      DUPE_POD_ID: app-1
+    ports:
+      - "8091:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app-2:
+    <<: *app
+    environment:
+      <<: *app-env
+      DUPE_POD_ID: app-2
+    ports:
+      - "8092:8080"
+
+  cerc-mock:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: mock-cerc
+      DUPE_DB_URL: jdbc:postgresql://postgres:5432/dupesc
+      DUPE_DB_USER: dupesc
+      DUPE_DB_PASSWORD: dupesc
+      DUPE_CERC_WEBHOOK_SECRET: poc-secret
+      DUPE_MOCK_WEBHOOK_DESTINO: http://app-1:8080,http://app-2:8080
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  legado-mock:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: mock-legado
+      DUPE_DB_URL: jdbc:postgresql://postgres:5432/dupesc
+      DUPE_DB_USER: dupesc
+      DUPE_DB_PASSWORD: dupesc
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata: {}

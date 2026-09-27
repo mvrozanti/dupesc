@@ -1,0 +1,6 @@
+dupe:
+  reconciliacao:
+    intervalo-ms: ${DUPE_RECONCILIACAO_INTERVALO_MS:10000}
+    idade-min-ms: ${DUPE_RECONCILIACAO_IDADE_MIN_MS:30000}
+  alerta:
+    intervalo-ms: 15000
