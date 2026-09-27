@@ -10,6 +10,7 @@ sealed interface EventoOperacao {
     data class Recusada(val erros: List<ErroRegistradora>) : EventoOperacao
     data class FalhaRetryavel(val erro: String) : EventoOperacao
     data class FalhaPermanente(val erro: String) : EventoOperacao
+    data class Indeterminada(val erro: String) : EventoOperacao
     data object LeaseExpirada : EventoOperacao
 }
 
@@ -40,6 +41,10 @@ object StateMachine {
             EstadoOperacao.PENDENTE, EstadoOperacao.EM_ENVIO, EstadoOperacao.ENVIADO -> EstadoOperacao.FALHA_PERMANENTE
             else -> null
         }
+        is EventoOperacao.Indeterminada -> when (atual) {
+            EstadoOperacao.ENVIADO -> EstadoOperacao.INDETERMINADO
+            else -> null
+        }
         EventoOperacao.LeaseExpirada -> when (atual) {
             EstadoOperacao.EM_ENVIO -> EstadoOperacao.PENDENTE
             else -> null
@@ -53,6 +58,7 @@ object StateMachine {
         is EventoOperacao.Recusada -> setOf(EstadoOperacao.ENVIADO)
         is EventoOperacao.FalhaRetryavel -> setOf(EstadoOperacao.EM_ENVIO)
         is EventoOperacao.FalhaPermanente -> setOf(EstadoOperacao.PENDENTE, EstadoOperacao.EM_ENVIO, EstadoOperacao.ENVIADO)
+        is EventoOperacao.Indeterminada -> setOf(EstadoOperacao.ENVIADO)
         EventoOperacao.LeaseExpirada -> setOf(EstadoOperacao.EM_ENVIO)
     }
 }

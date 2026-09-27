@@ -50,13 +50,12 @@ class ReconciliacaoService(
         val lotes = operacaoRepository.buscarLotesEnviados(idadeMin)
         var resolvidos = 0
         lotes.forEach { lote ->
-            transactionTemplate.executeWithoutResult {
-                operacaoRepository.incrementarConsultas(lote.operacaoIds)
-            }
             try {
                 val resultado = registry.port(lote.registradora).consultar(EnvioHandle(lote.loteId))
                 when (resultado.statusLote) {
-                    ProcessamentoEstado.PROCESSANDO -> Unit
+                    ProcessamentoEstado.PROCESSANDO -> transactionTemplate.executeWithoutResult {
+                        operacaoRepository.incrementarConsultas(lote.operacaoIds)
+                    }
                     ProcessamentoEstado.PROCESSADO -> resolvidos += aplicarItens(lote, resultado.itens)
                     ProcessamentoEstado.REJEITADO -> resolvidos += aplicarItens(lote, resultado.itens)
                     ProcessamentoEstado.ERRO -> resetar(lote)
@@ -70,15 +69,19 @@ class ReconciliacaoService(
     }
 
     private fun abandonarPresos() {
-        val ids = operacaoRepository.buscarEnviadosPresos(properties.reconciliacao.consultasLimite)
-        if (ids.isEmpty()) return
+        val presas = operacaoRepository.buscarEnviadosPresos(properties.reconciliacao.consultasLimite)
+        if (presas.isEmpty()) return
+        val erro = "desfecho indeterminado na registradora apos limite de consultas"
         transactionTemplate.executeWithoutResult {
-            operacaoRepository.falhaPermanente(ids, "enviado preso alem do limite de consultas")
-            ids.forEach { id ->
-                dlqRepository.inserir(OrigemDlq.OUTBOX, id, "{}", "enviado preso alem do limite de consultas")
+            operacaoRepository.marcarIndeterminado(presas.map { it.id }, erro)
+            presas.forEach { presa ->
+                dlqRepository.inserir(OrigemDlq.OUTBOX, presa.id, objectMapper.writeValueAsString(presa), erro)
             }
         }
-        log.warn("{} operacoes ENVIADO presas movidas para DLQ", ids.size)
+        log.warn(
+            "{} operacoes marcadas INDETERMINADO — conferir na registradora antes de reenviar: {}",
+            presas.size, presas.joinToString { "${it.referenciaExterna}@${it.loteId}" },
+        )
     }
 
     private fun aplicarItens(lote: LoteEnviado, itens: List<io.dupesc.domain.model.ItemResultado>): Int {

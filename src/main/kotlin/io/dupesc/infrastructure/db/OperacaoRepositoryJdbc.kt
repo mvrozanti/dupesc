@@ -3,6 +3,7 @@ package io.dupesc.infrastructure.db
 import io.dupesc.domain.model.EstadoOperacao
 import io.dupesc.domain.repository.LoteEnviado
 import io.dupesc.domain.repository.OperacaoLinha
+import io.dupesc.domain.repository.OperacaoPresa
 import io.dupesc.domain.repository.OperacaoRepository
 import io.dupesc.domain.service.EventoOperacao
 import io.dupesc.domain.service.StateMachine
@@ -62,10 +63,34 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
             .update()
     }
 
-    override fun buscarEnviadosPresos(consultasLimite: Int): List<Long> =
-        jdbc.sql("SELECT id FROM operacao WHERE estado = 'ENVIADO' AND consultas >= :limite")
+    override fun marcarIndeterminado(ids: List<Long>, erro: String) {
+        jdbc.sql(
+            """
+            UPDATE operacao SET estado = 'INDETERMINADO', ultimo_erro = :erro, atualizado_em = now()
+            WHERE id IN (:ids) AND estado IN (:estados)
+            """.trimIndent(),
+        )
+            .param("erro", erro)
+            .param("ids", ids)
+            .param("estados", estadosSql(EventoOperacao.Indeterminada("")))
+            .update()
+    }
+
+    override fun buscarEnviadosPresos(consultasLimite: Int): List<OperacaoPresa> =
+        jdbc.sql(
+            """
+            SELECT id, referencia_externa, registradora, lote_id, consultas
+            FROM operacao WHERE estado = 'ENVIADO' AND consultas >= :limite
+            """.trimIndent(),
+        )
             .param("limite", consultasLimite)
-            .query(Long::class.java)
+            .query { rs, _ -> OperacaoPresa(
+                id = rs.getLong("id"),
+                referenciaExterna = rs.getString("referencia_externa"),
+                registradora = rs.getString("registradora"),
+                loteId = rs.getString("lote_id"),
+                consultas = rs.getInt("consultas"),
+            ) }
             .list()
 
     override fun falhaPermanente(ids: List<Long>, erro: String) {

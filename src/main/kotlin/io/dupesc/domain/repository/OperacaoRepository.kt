@@ -5,6 +5,14 @@ import java.time.Instant
 
 data class LoteEnviado(val registradora: String, val loteId: String, val operacaoIds: List<Long>)
 
+data class OperacaoPresa(
+    val id: Long,
+    val referenciaExterna: String,
+    val registradora: String,
+    val loteId: String?,
+    val consultas: Int,
+)
+
 data class OperacaoLinha(
     val id: Long,
     val referenciaExterna: String,
@@ -21,7 +29,8 @@ interface OperacaoRepository {
     fun falhaRetryavel(ids: List<Long>, erro: String)
     fun falhaPermanente(ids: List<Long>, erro: String)
     fun incrementarConsultas(ids: List<Long>)
-    fun buscarEnviadosPresos(consultasLimite: Int): List<Long>
+    fun marcarIndeterminado(ids: List<Long>, erro: String)
+    fun buscarEnviadosPresos(consultasLimite: Int): List<OperacaoPresa>
     fun resetarParaPendente(ids: List<Long>)
     fun marcarRegistrado(id: Long, iud: String): Boolean
     fun marcarRecusado(id: Long, errosJson: String): Boolean

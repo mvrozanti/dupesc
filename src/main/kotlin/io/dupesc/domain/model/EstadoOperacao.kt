@@ -7,9 +7,11 @@ enum class EstadoOperacao {
     REGISTRADO,
     RECUSADO,
     FALHA_PERMANENTE,
+    INDETERMINADO,
     ;
 
-    fun terminal() = this == REGISTRADO || this == RECUSADO || this == FALHA_PERMANENTE
+    fun terminal() =
+        this == REGISTRADO || this == RECUSADO || this == FALHA_PERMANENTE || this == INDETERMINADO
 }
 
 enum class StatusOutbox {
