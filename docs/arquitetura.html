@@ -250,6 +250,53 @@ flowchart LR
   </section>
 
   <section>
+    <div class="eyebrow">Estados da duplicata</div>
+    <h2>A vida de uma duplicata</h2>
+    <p class="caption">Do ingresso ao registro, com o que é nosso dentro da caixa. A
+    registradora (fora da caixa) processa o lote e devolve o resultado. Terminais:
+    verde = registrado, âmbar = recusado, vermelho = dlq.</p>
+    <div class="slide">
+<pre class="mermaid">
+flowchart TD
+  ingress[/"nova duplicata · push&lt;br/&gt;backlog · pull"/]
+  cerc{{"CERC · registradora&lt;br/&gt;processa o lote → gera IUD"}}
+
+  subgraph nos["dupesc · o que é nosso"]
+    PENDENTE("PENDENTE&lt;br/&gt;fila outbox")
+    EM_ENVIO("EM_ENVIO&lt;br/&gt;claim SKIP LOCKED")
+    ENVIADO("ENVIADO&lt;br/&gt;lote aceito")
+    REGISTRADO("REGISTRADO&lt;br/&gt;IUD gravado no título")
+    RECUSADO("RECUSADO&lt;br/&gt;rejeição de negócio")
+    DLQ("DLQ&lt;br/&gt;falha permanente")
+  end
+
+  ingress --&gt; PENDENTE : "grava intenção+operação+outbox"
+  PENDENTE --&gt; EM_ENVIO : "claim"
+  EM_ENVIO --&gt; ENVIADO : "POST lote ok"
+  EM_ENVIO --&gt; PENDENTE : "retry · lease expirado"
+  ENVIADO --&gt; cerc : "lote"
+  cerc --&gt; REGISTRADO : "webhook · lote-finalizado"
+  cerc --&gt; RECUSADO : "rejeição"
+  ENVIADO --&gt; REGISTRADO : "reconciliação · consulta"
+  ENVIADO --&gt; RECUSADO : "rejeição de negócio"
+  ENVIADO --&gt; DLQ : "erro persistente"
+  EM_ENVIO --&gt; DLQ : "tentativas esgotadas"
+
+  classDef extc fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+  classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+  classDef ok fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+  classDef warn fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+  classDef bad fill:#ffebee,stroke:#c62828,stroke-width:2px
+  class cerc extc
+  class PENDENTE,EM_ENVIO,ENVIADO app
+  class REGISTRADO ok
+  class RECUSADO warn
+  class DLQ bad
+</pre>
+    </div>
+  </section>
+
+  <section>
     <div class="eyebrow">Pontos de entrada</div>
     <h2>Quem chama, e o que cada porta entrega</h2>
     <p class="caption">Cinco portas, cada uma com a própria garantia. Duas ingestões —
