@@ -1,0 +1,60 @@
+spring:
+  application:
+    name: dupesc
+  datasource:
+    url: ${DUPE_DB_URL:jdbc:postgresql://localhost:5432/dupesc}
+    username: ${DUPE_DB_USER:dupesc}
+    password: ${DUPE_DB_PASSWORD:dupesc}
+  flyway:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+
+dupe:
+  pod-id: ${DUPE_POD_ID:local}
+  worker:
+    batch: ${DUPE_WORKER_BATCH:200}
+    intervalo-ms: ${DUPE_WORKER_INTERVALO_MS:1000}
+    lease-ms: ${DUPE_WORKER_LEASE_MS:600000}
+  retry:
+    base-ms: ${DUPE_RETRY_BASE_MS:5000}
+    cap-ms: ${DUPE_RETRY_CAP_MS:600000}
+    max-attempts: ${DUPE_RETRY_MAX_ATTEMPTS:5}
+  reconciliacao:
+    intervalo-ms: ${DUPE_RECONCILIACAO_INTERVALO_MS:300000}
+    idade-min-ms: ${DUPE_RECONCILIACAO_IDADE_MIN_MS:1800000}
+  leitor:
+    intervalo-ms: ${DUPE_LEITOR_INTERVALO_MS:5000}
+    tamanho-pagina: ${DUPE_LEITOR_TAMANHO_PAGINA:1000}
+    max-paginas-por-ciclo: ${DUPE_LEITOR_MAX_PAGINAS_POR_CICLO:10}
+    max-queue-pendente: ${DUPE_LEITOR_MAX_QUEUE_PENDENTE:50000}
+  alerta:
+    queue-limite: ${DUPE_ALERTA_QUEUE_LIMITE:10000}
+  cerc:
+    base-url: ${DUPE_CERC_BASE_URL:http://localhost:8081}
+    token-url: ${DUPE_CERC_TOKEN_URL:http://localhost:8081/oauth/token}
+    client-id: ${DUPE_CERC_CLIENT_ID:poc-client}
+    client-secret: ${DUPE_CERC_CLIENT_SECRET:poc-secret}
+    webhook-secret: ${DUPE_CERC_WEBHOOK_SECRET:poc-secret}
+    rate-limit-rps: ${DUPE_RATE_LIMIT_RPS:80}
+  legado:
+    base-url: ${DUPE_LEGADO_BASE_URL:http://localhost:8082}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      cerc:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 5
+  ratelimiter:
+    instances:
+      cerc:
+        limit-for-period: ${DUPE_RATE_LIMIT_RPS:80}
+        limit-refresh-period: 1s
+        timeout-duration: 10s
