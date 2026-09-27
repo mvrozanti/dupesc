@@ -1,0 +1,5 @@
+dupe:
+  scheduling:
+    enabled: false
+  mock:
+    webhook-destino: ${DUPE_MOCK_WEBHOOK_DESTINO:}
