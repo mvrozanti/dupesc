@@ -1,15 +1,20 @@
 # dupesc — escrituração de duplicatas
 
-Serviço que lê operações não pagas de um endpoint legado e as registra como duplicata
-escritural nas registradoras. POC pronta para produção: não perde webhook, não duplica,
-escala horizontalmente.
+Serviço que **recebe novas duplicatas (push via API)** e **migra o backlog do legado
+(pull)**, registrando cada operação como duplicata escritural numa registradora. POC
+pronta para produção: não perde webhook, não duplica, escala horizontalmente.
 
-**Estado atual — 1 registradora.** Implementado e validado: **CERC**. Desenhado (port,
-coluna `registradora`, registry) mas **não construído**: **B3** (mTLS + ticket assíncrono),
-**Núclea** (arquivo SPB/XML) e a **regra de roteamento** multi-registradora. Não apresentar
-como multi-registradora funcionando hoje.
+**Estado atual — 1 registradora implementada.** Implementado e validado: **CERC**. A
+abstração multi-registradora está desenhada (port, coluna `registradora`, registry), mas
+**não construído**: **B3** (mTLS + ticket assíncrono), **Núclea** (arquivo SPB/XML) e a
+**regra de roteamento** (qual registradora recebe qual operação). Não apresentar como
+multi-registradora funcionando hoje.
 
 ## Diagramas
+
+Diagramas visuais atualizados (infra, fluxo de dados, pontos de entrada) vivem em
+[`docs/arquitetura.html`](docs/arquitetura.html) — abra no navegador. Abaixo, os
+esqueletos textuais.
 
 ### Sequência
 
@@ -95,9 +100,9 @@ flowchart TD
 (fila transacional), `checkpoint` (página do legado), `dlq`.
 
 **Por que uma DLQ só**: uma única superfície de revisão operacional — a tabela `dlq`
-com `origem` em `OUTBOX|WEBHOOK|LEITOR`. Rejeição de negócio da registradora **não** vai
-para a DLQ: vira estado `RECUSADO`, auditável. Filas por registradora fragmentariam a
-revisão sem ganho de throughput nesta escala.
+com `origem` em `OUTBOX|WEBHOOK|LEITOR|INGESTAO`. Rejeição de negócio da registradora
+**não** vai para a DLQ: vira estado `RECUSADO`, auditável. Filas por registradora
+fragmentariam a revisão sem ganho de throughput nesta escala.
 
 ## Rodando a demo
 
