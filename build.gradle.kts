@@ -44,4 +44,5 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    systemProperty("api.version", "1.47")
 }
