@@ -1,8 +1,13 @@
 # dupesc — escrituração de duplicatas
 
 Serviço que lê operações não pagas de um endpoint legado e as registra como duplicata
-escritural nas registradoras (CERC primeiro; B3 e Núclea depois). POC pronta para
-produção: não perde webhook, não duplica, escala horizontalmente.
+escritural nas registradoras. POC pronta para produção: não perde webhook, não duplica,
+escala horizontalmente.
+
+**Estado atual — 1 registradora.** Implementado e validado: **CERC**. Desenhado (port,
+coluna `registradora`, registry) mas **não construído**: **B3** (mTLS + ticket assíncrono),
+**Núclea** (arquivo SPB/XML) e a **regra de roteamento** multi-registradora. Não apresentar
+como multi-registradora funcionando hoje.
 
 ## Diagramas
 
