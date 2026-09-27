@@ -24,24 +24,27 @@ class LeitorService(
 
     private fun drenarComLock(): Int {
         var lidas = 0
-        var paginaAtual = checkpointRepository.buscar(CHECKPOINT_PAGINA) ?: 0L
+        var cursor = checkpointRepository.buscar(CHECKPOINT_CURSOR) ?: -1L
         repeat(properties.leitor.maxPaginasPorCiclo) {
             if (operacaoRepository.contarPendentes() >= properties.leitor.maxQueuePendente) return lidas
-            val pagina = legadoPort.buscarPagina(paginaAtual + 1, properties.leitor.tamanhoPagina)
+            val pagina = legadoPort.buscarApos(cursor, properties.leitor.tamanhoPagina)
             if (pagina.operacoes.isEmpty()) return lidas
             lidas += ingestaoService.gravar(pagina.operacoes, OrigemDlq.LEITOR)
-            val avancou = transactionTemplate.execute {
-                checkpointRepository.avancar(CHECKPOINT_PAGINA, paginaAtual, pagina.pagina)
-            } ?: false
-            if (!avancou) return lidas
-            paginaAtual = pagina.pagina
+            val proximo = pagina.proximoCursor
+            if (proximo != null) {
+                val avancou = transactionTemplate.execute {
+                    checkpointRepository.avancar(CHECKPOINT_CURSOR, cursor, proximo)
+                } ?: false
+                if (!avancou) return lidas
+                cursor = proximo
+            }
             if (!pagina.temMais) return lidas
         }
         return lidas
     }
 
     companion object {
-        const val CHECKPOINT_PAGINA = "legado.pagina"
+        const val CHECKPOINT_CURSOR = "legado.cursor"
         const val LOCK_LEITOR = 741001L
     }
 }

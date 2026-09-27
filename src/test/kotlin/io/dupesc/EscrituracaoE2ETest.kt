@@ -28,7 +28,7 @@ class EscrituracaoE2ETest : WireMockTestBase() {
     fun limpar() {
         limparStubs()
         jdbcTemplate.update("TRUNCATE checkpoint, intencao, operacao, outbox, titulo, eventos_recebidos, dlq")
-        stubLegadoPagina(1, """{"pagina":1,"tem_mais":false,"operacoes":${corpoLegado(listOf(0))}}""")
+        stubLegadoApos(-1L, pagina(null, false, listOf(0)))
         stubLoteCerc("lote-1")
         stubStatusLote("PROCESSADO", """[{"referencia_externa":"DU-OP-0","identificador_item_processado":"IUD000000000000000001"}]""")
     }

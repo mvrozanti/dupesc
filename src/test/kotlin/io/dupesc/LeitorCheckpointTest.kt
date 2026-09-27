@@ -16,29 +16,27 @@ class LeitorCheckpointTest : WireMockTestBase() {
     private lateinit var jdbcTemplate: JdbcTemplate
 
     @BeforeEach
-    fun prepararTresPaginas() {
+    fun preparar() {
         limparStubs()
-        stubLegadoPagina(1, """{"pagina":1,"tem_mais":true,"operacoes":${corpoLegado(listOf(0, 1))}}""")
-        stubLegadoPagina(2, """{"pagina":2,"tem_mais":true,"operacoes":${corpoLegado(listOf(2, 3))}}""")
-        stubLegadoPagina(3, """{"pagina":3,"tem_mais":false,"operacoes":${corpoLegado(listOf(4))}}""")
+        stubLegadoApos(-1L, pagina(4L, false, listOf(0, 1, 2, 3, 4)))
         jdbcTemplate.update("TRUNCATE checkpoint, intencao, operacao, outbox, titulo, eventos_recebidos, dlq")
     }
 
     @Test
-    fun `leitor avanca o checkpoint de forma monotona e releitura de pagina nao duplica`() {
+    fun `leitor avanca o cursor de forma monotona e releitura nao duplica`() {
         leitorService.drenar()
-        assertThat(checkpoint()).isEqualTo(3L)
+        assertThat(checkpoint()).isEqualTo(4L)
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM intencao", Int::class.java)).isEqualTo(5)
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM outbox", Int::class.java)).isEqualTo(5)
 
-        jdbcTemplate.update("UPDATE checkpoint SET valor = 1 WHERE nome = 'legado.pagina'")
+        jdbcTemplate.update("UPDATE checkpoint SET valor = -1 WHERE nome = 'legado.cursor'")
         leitorService.drenar()
 
-        assertThat(checkpoint()).isEqualTo(3L)
+        assertThat(checkpoint()).isEqualTo(4L)
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM intencao", Int::class.java)).isEqualTo(5)
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM outbox", Int::class.java)).isEqualTo(5)
     }
 
     private fun checkpoint(): Long =
-        jdbcTemplate.queryForObject("SELECT valor FROM checkpoint WHERE nome = 'legado.pagina'", Long::class.java)!!
+        jdbcTemplate.queryForObject("SELECT valor FROM checkpoint WHERE nome = 'legado.cursor'", Long::class.java)!!
 }

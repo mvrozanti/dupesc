@@ -114,9 +114,10 @@ class OutboxRepositoryJdbc(
     override fun repararLeasesVencidos(): List<Long> =
         jdbc.sql(
             """
-            UPDATE outbox SET status = 'PENDENTE', next_attempt_at = now(), claimed_by = NULL, claimed_until = NULL
-            WHERE status = 'EM_ENVIO' AND claimed_until < now()
-            RETURNING operacao_id
+            UPDATE outbox o SET status = 'PENDENTE', next_attempt_at = now(), claimed_by = NULL, claimed_until = NULL
+            FROM operacao op
+            WHERE o.operacao_id = op.id AND o.status = 'EM_ENVIO' AND o.claimed_until < now() AND op.lote_id IS NULL
+            RETURNING o.operacao_id
             """.trimIndent(),
         )
             .query(Long::class.java)
@@ -124,6 +125,25 @@ class OutboxRepositoryJdbc(
             .also { ids ->
                 if (ids.isNotEmpty()) {
                     jdbc.sql("UPDATE operacao SET estado = 'PENDENTE', atualizado_em = now() WHERE id IN (:ids) AND estado = 'EM_ENVIO'")
+                        .param("ids", ids)
+                        .update()
+                }
+            }
+
+    override fun promoverEnviadosComLote(): List<Long> =
+        jdbc.sql(
+            """
+            UPDATE outbox o SET status = 'PROCESSADO', atualizado_em = now()
+            FROM operacao op
+            WHERE o.operacao_id = op.id AND o.status = 'EM_ENVIO' AND o.claimed_until < now() AND op.lote_id IS NOT NULL
+            RETURNING o.operacao_id
+            """.trimIndent(),
+        )
+            .query(Long::class.java)
+            .list()
+            .also { ids ->
+                if (ids.isNotEmpty()) {
+                    jdbc.sql("UPDATE operacao SET estado = 'ENVIADO', enviado_em = now(), atualizado_em = now() WHERE id IN (:ids) AND estado = 'EM_ENVIO'")
                         .param("ids", ids)
                         .update()
                 }

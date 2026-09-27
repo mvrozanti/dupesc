@@ -29,7 +29,7 @@ data class InformacoesPagamentoLegado(
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class PaginaLegado(
-    val pagina: Long,
-    val temMais: Boolean,
     val operacoes: List<OperacaoLegado>,
+    val proximoCursor: Long?,
+    val temMais: Boolean,
 )

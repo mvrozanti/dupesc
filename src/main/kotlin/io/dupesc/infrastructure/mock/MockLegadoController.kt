@@ -23,35 +23,41 @@ class MockLegadoController {
     private val total = AtomicInteger(0)
 
     @GetMapping("/legado/operacoes")
-    fun operacoes(@RequestParam pagina: Long, @RequestParam tamanho: Int): PaginaLegado {
-        val inicio = ((pagina - 1) * tamanho).toInt()
-        val fim = minOf(inicio + tamanho, total.get())
-        val operacoes = (inicio until fim).map { n ->
-            val emissao = LocalDate.of(2026, 1, 1).plusDays(n.toLong())
-            OperacaoLegado(
-                id = "OP-$n",
-                duplicataId = n.toLong(),
-                emissao = emissao,
-                vencimento = emissao.plusDays(30),
-                valor = BigDecimal("1000.00").add(BigDecimal(n)),
-                sacadorDocumento = "31619393000140",
-                sacadorNome = "FIDC Gestora Ltda",
-                sacadoDocumento = "39053344705",
-                sacadoNome = "Sacado $n",
-                sacadoEmail = "sacado$n@example.com",
-                informacoesPagamento = InformacoesPagamentoLegado(
-                    tipoInstrumento = "PPIX",
-                    iban = null,
-                    chavePix = "sacado$n@example.com",
-                ),
-            )
-        }
-        return PaginaLegado(pagina = pagina, temMais = fim < total.get(), operacoes = operacoes)
+    fun operacoes(@RequestParam afterId: Long, @RequestParam tamanho: Int): PaginaLegado {
+        val inicio = afterId + 1
+        val fim = minOf(inicio + tamanho, total.get().toLong())
+        val operacoes = (inicio until fim).map { n -> operacao(n) }
+        return PaginaLegado(
+            operacoes = operacoes,
+            proximoCursor = if (fim > inicio) fim - 1 else null,
+            temMais = fim < total.get(),
+        )
     }
 
     @PostMapping("/mock/legado/reiniciar")
     fun reiniciar(@RequestBody corpo: ReiniciarRequest): ResponseEntity<Void> {
         total.set(corpo.total)
         return ResponseEntity.ok().build()
+    }
+
+    private fun operacao(n: Long): OperacaoLegado {
+        val emissao = LocalDate.of(2026, 1, 1).plusDays(n)
+        return OperacaoLegado(
+            id = "OP-$n",
+            duplicataId = n,
+            emissao = emissao,
+            vencimento = emissao.plusDays(30),
+            valor = BigDecimal("1000.00").add(BigDecimal(n)),
+            sacadorDocumento = "31619393000140",
+            sacadorNome = "FIDC Gestora Ltda",
+            sacadoDocumento = "39053344705",
+            sacadoNome = "Sacado $n",
+            sacadoEmail = "sacado$n@example.com",
+            informacoesPagamento = InformacoesPagamentoLegado(
+                tipoInstrumento = "PPIX",
+                iban = null,
+                chavePix = "sacado$n@example.com",
+            ),
+        )
     }
 }

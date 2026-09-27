@@ -16,14 +16,14 @@ class LegadoAdapter(
 
     private val client: RestClient = builder.baseUrl(properties.legado.baseUrl).build()
 
-    override fun buscarPagina(pagina: Long, tamanho: Int): PaginaLegado =
+    override fun buscarApos(cursor: Long, tamanho: Int): PaginaLegado =
         try {
             client.get()
-                .uri("/legado/operacoes?pagina={pagina}&tamanho={tamanho}", pagina, tamanho)
+                .uri("/legado/operacoes?after_id={after}&tamanho={tamanho}", cursor, tamanho)
                 .retrieve()
                 .body(PaginaLegado::class.java)
-                ?: throw LegadoException("resposta vazia do endpoint legado na pagina $pagina")
+                ?: throw LegadoException("resposta vazia do endpoint legado apos $cursor")
         } catch (e: RestClientException) {
-            throw LegadoException("falha ao buscar pagina $pagina: ${e.message}", e)
+            throw LegadoException("falha ao buscar apos $cursor: ${e.message}", e)
         }
 }

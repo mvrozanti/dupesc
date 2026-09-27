@@ -29,7 +29,7 @@ class ConcorrenciaSemDuplicatasTest : WireMockTestBase() {
     @BeforeEach
     fun prepararFilaCom50() {
         limparStubs()
-        stubLegadoPagina(1, """{"pagina":1,"tem_mais":false,"operacoes":${corpoLegado((0L until 50L).toList())}}""")
+        stubLegadoApos(-1L, pagina(null, false, (0L until 50L).toList()))
         stubLoteCerc("lote-1")
         jdbcTemplate.update("TRUNCATE checkpoint, intencao, operacao, outbox, titulo, eventos_recebidos, dlq")
         leitorService.drenar()

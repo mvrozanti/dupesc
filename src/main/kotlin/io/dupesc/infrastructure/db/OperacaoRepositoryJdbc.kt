@@ -26,6 +26,15 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
             .query(Long::class.java)
             .single()!!
 
+    override fun registrarLote(ids: List<Long>, loteId: String) {
+        jdbc.sql(
+            "UPDATE operacao SET lote_id = :lote, atualizado_em = now() WHERE id IN (:ids) AND estado = 'EM_ENVIO'",
+        )
+            .param("lote", loteId)
+            .param("ids", ids)
+            .update()
+    }
+
     override fun marcarEnviado(ids: List<Long>, loteId: String) {
         jdbc.sql(
             """

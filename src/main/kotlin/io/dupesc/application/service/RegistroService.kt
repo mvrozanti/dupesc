@@ -57,6 +57,9 @@ class RegistroService(
         try {
             val handle = registry.port(registradora).enviar(validos.map { it.second })
             transactionTemplate.executeWithoutResult {
+                operacaoRepository.registrarLote(validos.map { it.first }, handle.id)
+            }
+            transactionTemplate.executeWithoutResult {
                 operacaoRepository.marcarEnviado(validos.map { it.first }, handle.id)
                 outboxRepository.marcarProcessado(validos.map { it.first })
             }

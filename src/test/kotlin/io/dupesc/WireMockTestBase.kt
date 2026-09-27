@@ -63,13 +63,16 @@ abstract class WireMockTestBase : PostgresTestBase() {
         stubToken()
     }
 
-    protected fun stubLegadoPagina(pagina: Long, corpo: String) {
+    protected fun stubLegadoApos(cursor: Long, corpo: String) {
         wireMock.stubFor(
             get(urlPathEqualTo("/legado/operacoes"))
-                .withQueryParam("pagina", equalTo("$pagina"))
+                .withQueryParam("after_id", equalTo("$cursor"))
                 .willReturn(aResponse().withHeader("Content-Type", "application/json").withBody(corpo)),
         )
     }
+
+    protected fun pagina(proximoCursor: Long?, temMais: Boolean, ids: List<Long>): String =
+        """{"operacoes":${corpoLegado(ids)}, "proximo_cursor":${proximoCursor ?: "null"}, "tem_mais":$temMais}"""
 
     protected fun stubLoteCerc(id: String) {
         wireMock.stubFor(

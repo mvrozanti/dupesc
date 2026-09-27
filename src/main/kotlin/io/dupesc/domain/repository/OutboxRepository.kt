@@ -21,5 +21,6 @@ interface OutboxRepository {
     fun marcarDlq(operacaoIds: List<Long>)
     fun reabrir(operacaoIds: List<Long>)
     fun repararLeasesVencidos(): List<Long>
+    fun promoverEnviadosComLote(): List<Long>
     fun idadePendenteMaisAntigoMs(): Long?
 }

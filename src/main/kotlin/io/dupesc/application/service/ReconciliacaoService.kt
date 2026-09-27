@@ -34,8 +34,12 @@ class ReconciliacaoService(
     }
 
     private fun repararLeases() {
-        val ids = transactionTemplate.execute { outboxRepository.repararLeasesVencidos() } ?: emptyList()
-        if (ids.isNotEmpty()) log.warn("{} leases de envio expirados reparados", ids.size)
+        transactionTemplate.executeWithoutResult {
+            val promovidos = outboxRepository.promoverEnviadosComLote()
+            val resetados = outboxRepository.repararLeasesVencidos()
+            if (promovidos.isNotEmpty()) log.warn("{} envios concluidos promovidos a ENVIADO", promovidos.size)
+            if (resetados.isNotEmpty()) log.warn("{} leases de envio expirados reenfileirados", resetados.size)
+        }
     }
 
     private fun reconciliarEnviados(): Int {

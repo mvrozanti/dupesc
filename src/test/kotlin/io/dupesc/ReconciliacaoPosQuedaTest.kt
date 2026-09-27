@@ -36,7 +36,7 @@ class ReconciliacaoPosQuedaTest : WireMockTestBase() {
     @BeforeEach
     fun prepararEnviadoComStatusEterno() {
         limparStubs()
-        stubLegadoPagina(1, """{"pagina":1,"tem_mais":false,"operacoes":${corpoLegado(listOf(0))}}""")
+        stubLegadoApos(-1L, pagina(null, false, listOf(0)))
         stubLoteCerc("lote-1")
         wireMock.stubFor(
             get(urlPathMatching("/v2/lote/.*/status"))

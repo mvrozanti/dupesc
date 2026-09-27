@@ -15,6 +15,7 @@ data class OperacaoLinha(
 
 interface OperacaoRepository {
     fun inserir(intencaoId: Long, referenciaExterna: String, registradora: String): Long
+    fun registrarLote(ids: List<Long>, loteId: String)
     fun marcarEnviado(ids: List<Long>, loteId: String)
     fun falhaRetryavel(ids: List<Long>, erro: String, zeraTentativas: Boolean = false)
     fun falhaPermanente(ids: List<Long>, erro: String)
