@@ -36,7 +36,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    CERC[CERC homolog] <--> LB[ALB + mTLS/WAF]
+    CERC[CERC] <--> LB[ALB + mTLS/WAF]
     LB --> P[pods dupesc xN]
     P --> DB[(RDS Postgres 16 Multi-AZ)]
     S[Secrets Manager] --> P
