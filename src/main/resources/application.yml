@@ -43,6 +43,7 @@ dupe:
     rate-limit-rps: ${DUPE_RATE_LIMIT_RPS:80}
   legado:
     base-url: ${DUPE_LEGADO_BASE_URL:http://localhost:8082}
+    api-key: ${DUPE_LEGADO_API_KEY:poc-legado}
 
 resilience4j:
   circuitbreaker:

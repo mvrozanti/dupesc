@@ -23,7 +23,7 @@ data class DupeProperties(
         val webhookSecret: String = "poc-secret",
         val rateLimitRps: Int = 80,
     )
-    data class Legado(val baseUrl: String = "http://localhost:8082")
+    data class Legado(val baseUrl: String = "http://localhost:8082", val apiKey: String = "poc-legado")
     data class Worker(val batch: Int = 200, val intervaloMs: Long = 1000, val leaseMs: Long = 600_000)
     data class Retry(val baseMs: Long = 5_000, val capMs: Long = 600_000, val maxAttempts: Int = 5)
     data class Reconciliacao(val intervaloMs: Long = 300_000, val idadeMinMs: Long = 1_800_000)
