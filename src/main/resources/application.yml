@@ -1,6 +1,10 @@
 spring:
   application:
     name: dupesc
+  task:
+    scheduling:
+      pool:
+        size: 4
   datasource:
     url: ${DUPE_DB_URL:jdbc:postgresql://localhost:5432/dupesc}
     username: ${DUPE_DB_USER:dupesc}

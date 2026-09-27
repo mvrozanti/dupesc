@@ -1,20 +1,36 @@
 package io.dupesc.infrastructure.db
 
-import org.springframework.jdbc.core.simple.JdbcClient
+import org.slf4j.LoggerFactory
+import org.springframework.jdbc.datasource.DataSourceUtils
 import org.springframework.stereotype.Component
-import org.springframework.transaction.support.TransactionTemplate
+import javax.sql.DataSource
 
 @Component
-class AdvisoryLockManager(
-    private val jdbc: JdbcClient,
-    private val transactionTemplate: TransactionTemplate,
-) {
+class AdvisoryLockManager(private val dataSource: DataSource) {
 
-    fun <T> comLock(lockId: Long, bloco: () -> T): T? = transactionTemplate.execute {
-        val obtido = jdbc.sql("SELECT pg_try_advisory_xact_lock(:lock)")
-            .param("lock", lockId)
-            .query(Boolean::class.java)
-            .single()!!
-        if (obtido) bloco() else null
+    private val log = LoggerFactory.getLogger(AdvisoryLockManager::class.java)
+
+    fun <T> comLock(lockId: Long, bloco: () -> T): T? {
+        val conn = DataSourceUtils.getConnection(dataSource)
+        var adquirido = false
+        return try {
+            adquirido = conn.prepareStatement("SELECT pg_try_advisory_lock(?)").use { st ->
+                st.setLong(1, lockId)
+                st.executeQuery().use { rs -> rs.next() && rs.getBoolean(1) }
+            }
+            if (adquirido) bloco() else null
+        } finally {
+            if (adquirido) {
+                try {
+                    conn.prepareStatement("SELECT pg_advisory_unlock(?)").use { st ->
+                        st.setLong(1, lockId)
+                        st.executeQuery().close()
+                    }
+                } catch (e: Exception) {
+                    log.warn("falha ao liberar advisory lock {}", lockId, e)
+                }
+            }
+            DataSourceUtils.releaseConnection(conn, dataSource)
+        }
     }
 }

@@ -34,7 +34,7 @@ class ReconciliacaoService(
     }
 
     private fun repararLeases() {
-        val ids = outboxRepository.repararLeasesVencidos()
+        val ids = transactionTemplate.execute { outboxRepository.repararLeasesVencidos() } ?: emptyList()
         if (ids.isNotEmpty()) log.warn("{} leases de envio expirados reparados", ids.size)
     }
 

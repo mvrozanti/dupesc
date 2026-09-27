@@ -7,12 +7,15 @@ import io.dupesc.domain.model.ItemResultado
 import io.dupesc.domain.model.ProcessamentoEstado
 import io.dupesc.domain.model.RegistroComando
 import io.dupesc.domain.port.RegistradoraPort
+import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
 
 @Component("registradoraBruta")
 @ConditionalOnProperty(name = ["dupe.cerc.enabled"], havingValue = "true", matchIfMissing = true)
 class CercAdapter(private val client: CercClient) : RegistradoraPort {
+
+    private val log = LoggerFactory.getLogger(CercAdapter::class.java)
 
     override fun enviar(comandos: List<RegistroComando>): EnvioHandle =
         EnvioHandle(client.enviarLote(CercPayloadMapper.itens(comandos)).id)
@@ -39,8 +42,15 @@ class CercAdapter(private val client: CercClient) : RegistradoraPort {
         }
         return ConsultaResultado(
             handle = handle,
-            statusLote = ProcessamentoEstado.valueOf(status.status),
+            statusLote = parseStatus(status.status),
             itens = processados + invalidos,
         )
     }
+
+    private fun parseStatus(status: String): ProcessamentoEstado =
+        runCatching { ProcessamentoEstado.valueOf(status.uppercase()) }
+            .getOrElse {
+                log.warn("status desconhecido da CERC '{}' tratado como PROCESSANDO", status)
+                ProcessamentoEstado.PROCESSANDO
+            }
 }

@@ -7,6 +7,7 @@ import io.dupesc.domain.repository.OrigemDlq
 import io.dupesc.infrastructure.configuration.DupeProperties
 import io.dupesc.infrastructure.db.AdvisoryLockManager
 import org.springframework.stereotype.Service
+import org.springframework.transaction.support.TransactionTemplate
 
 @Service
 class LeitorService(
@@ -16,6 +17,7 @@ class LeitorService(
     private val operacaoRepository: OperacaoRepository,
     private val advisoryLockManager: AdvisoryLockManager,
     private val properties: DupeProperties,
+    private val transactionTemplate: TransactionTemplate,
 ) {
 
     fun drenar(): Int? = advisoryLockManager.comLock(LOCK_LEITOR) { drenarComLock() }
@@ -28,7 +30,10 @@ class LeitorService(
             val pagina = legadoPort.buscarPagina(paginaAtual + 1, properties.leitor.tamanhoPagina)
             if (pagina.operacoes.isEmpty()) return lidas
             lidas += ingestaoService.gravar(pagina.operacoes, OrigemDlq.LEITOR)
-            if (!checkpointRepository.avancar(CHECKPOINT_PAGINA, paginaAtual, pagina.pagina)) return lidas
+            val avancou = transactionTemplate.execute {
+                checkpointRepository.avancar(CHECKPOINT_PAGINA, paginaAtual, pagina.pagina)
+            } ?: false
+            if (!avancou) return lidas
             paginaAtual = pagina.pagina
             if (!pagina.temMais) return lidas
         }
