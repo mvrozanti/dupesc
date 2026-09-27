@@ -23,4 +23,6 @@ interface OutboxRepository {
     fun repararLeasesVencidos(): List<Long>
     fun promoverEnviadosComLote(): List<Long>
     fun idadePendenteMaisAntigoMs(): Long?
+    fun contarPendentes(): Long
+    fun reprocessar(operacaoId: Long): Boolean
 }

@@ -24,11 +24,12 @@ class WebhookController(
         @RequestHeader(value = "X-Signature", required = false) xSignature: String?,
         @RequestBody corpo: String,
     ): ResponseEntity<Void> {
-        if (!assinatura.valida(registradora, corpo, xSignature)) {
+        val nome = registradora.uppercase()
+        if (!assinatura.valida(nome, corpo, xSignature)) {
             metrics.registrarWebhook401()
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
         }
-        webhookService.processar(registradora, corpo)
+        webhookService.processar(nome, corpo)
         return ResponseEntity.ok().build()
     }
 }

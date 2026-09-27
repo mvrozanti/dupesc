@@ -8,10 +8,10 @@ import javax.crypto.spec.SecretKeySpec
 @Component
 class WebhookAssinatura(properties: DupeProperties) {
 
-    private val secrets = mapOf("cerc" to properties.cerc.webhookSecret)
+    private val secrets = mapOf("CERC" to properties.cerc.webhookSecret)
 
     fun valida(registradora: String, corpo: String, assinatura: String?): Boolean {
-        val secret = secrets[registradora] ?: return false
+        val secret = secrets[registradora.uppercase()] ?: return false
         if (assinatura.isNullOrBlank()) return false
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secret.toByteArray(), "HmacSHA256"))

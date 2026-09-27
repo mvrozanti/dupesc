@@ -1,7 +1,6 @@
 package io.dupesc.application.job
 
 import io.dupesc.domain.repository.DlqRepository
-import io.dupesc.domain.repository.OperacaoRepository
 import io.dupesc.domain.repository.OutboxRepository
 import io.dupesc.infrastructure.configuration.DupeProperties
 import org.slf4j.LoggerFactory
@@ -10,7 +9,6 @@ import org.springframework.stereotype.Component
 
 @Component
 class AlertaJob(
-    private val operacaoRepository: OperacaoRepository,
     private val outboxRepository: OutboxRepository,
     private val dlqRepository: DlqRepository,
     private val properties: DupeProperties,
@@ -20,7 +18,7 @@ class AlertaJob(
 
     @Scheduled(fixedDelayString = "\${dupe.alerta.intervalo-ms:60000}")
     fun executar() {
-        val pendentes = operacaoRepository.contarPendentes()
+        val pendentes = outboxRepository.contarPendentes()
         val maisAntigoMs = outboxRepository.idadePendenteMaisAntigoMs()
         val dlq = dlqRepository.contarAbertos()
         if (pendentes > properties.alerta.queueLimite) {

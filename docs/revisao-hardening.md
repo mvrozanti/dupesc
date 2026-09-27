@@ -44,8 +44,8 @@ Status: **corrigido** (commit) / **planejado** (não começado).
 
 | # | Crítica | Melhoria | Status |
 |---|---|---|---|
-| 13 | `assinatura="S"`, `tipo="MERC"`, `parcela=1`, `fatura=referencia.take(60)` hardcoded — afirmação jurídica sem dado | campos reais no payload canônico; rejeitar onde o legado não fornecer; escala do BigDecimal | planejado |
-| 14 | `titulo.duplicata_id UNIQUE` bloqueia multi-registradora | pré-requisito: chave `(registradora, duplicata_id)` — aguarda roteamento | planejado |
+| 13 | `assinatura="S"`, `tipo="MERC"`, `parcela=1`, `fatura=referencia.take(60)` hardcoded — afirmação jurídica sem dado | campos reais no payload canônico; rejeitar onde o legado não fornecer; escala do BigDecimal | corrigido |
+| 14 | `titulo.duplicata_id UNIQUE` bloqueia multi-registradora | pré-requisito: chave `(registradora, duplicata_id)` — aguarda roteamento | pré-requisito |
 
 ## G — Operação/observabilidade
 

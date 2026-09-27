@@ -2,8 +2,8 @@ package io.dupesc.application.service
 
 import io.dupesc.domain.port.LegacyPort
 import io.dupesc.domain.repository.CheckpointRepository
-import io.dupesc.domain.repository.OperacaoRepository
 import io.dupesc.domain.repository.OrigemDlq
+import io.dupesc.domain.repository.OutboxRepository
 import io.dupesc.infrastructure.configuration.DupeProperties
 import io.dupesc.infrastructure.db.AdvisoryLockManager
 import org.springframework.stereotype.Service
@@ -14,7 +14,7 @@ class LeitorService(
     private val legadoPort: LegacyPort,
     private val ingestaoService: IngestaoService,
     private val checkpointRepository: CheckpointRepository,
-    private val operacaoRepository: OperacaoRepository,
+    private val outboxRepository: OutboxRepository,
     private val advisoryLockManager: AdvisoryLockManager,
     private val properties: DupeProperties,
     private val transactionTemplate: TransactionTemplate,
@@ -26,7 +26,7 @@ class LeitorService(
         var lidas = 0
         var cursor = checkpointRepository.buscar(CHECKPOINT_CURSOR) ?: -1L
         repeat(properties.leitor.maxPaginasPorCiclo) {
-            if (operacaoRepository.contarPendentes() >= properties.leitor.maxQueuePendente) return lidas
+            if (outboxRepository.contarPendentes() >= properties.leitor.maxQueuePendente) return lidas
             val pagina = legadoPort.buscarApos(cursor, properties.leitor.tamanhoPagina)
             if (pagina.operacoes.isEmpty()) return lidas
             lidas += ingestaoService.gravar(pagina.operacoes, OrigemDlq.LEITOR)

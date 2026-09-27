@@ -21,6 +21,9 @@ class CredenciaisGuard(properties: DupeProperties, environment: Environment) {
                     "credenciais placeholder em perfil nao-dev: ${suspeitas.joinToString { it.first }}",
                 )
             }
+            if (properties.podId.isBlank() || properties.podId == "local") {
+                throw IllegalStateException("DUPE_POD_ID nao definido em perfil nao-dev")
+            }
         }
     }
 }

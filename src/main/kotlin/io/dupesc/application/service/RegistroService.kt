@@ -98,9 +98,11 @@ class RegistroService(
         val retryaveis = ids.filterNot { it in esgotados }
         transactionTemplate.executeWithoutResult {
             if (retryaveis.isNotEmpty()) {
-                val atraso = retryPolicy.atrasoMs(claimsPorId[retryaveis.first()]?.attemptCount ?: 1)
-                outboxRepository.falhaRetryavel(retryaveis, atraso, mensagem)
-                operacaoRepository.falhaRetryavel(retryaveis, mensagem)
+                retryaveis.groupBy { claimsPorId[it]?.attemptCount ?: 1 }.forEach { (attempt, grupo) ->
+                    val atraso = retryPolicy.atrasoMs(attempt)
+                    outboxRepository.falhaRetryavel(grupo, atraso, mensagem)
+                    operacaoRepository.falhaRetryavel(grupo, mensagem)
+                }
             }
             if (esgotados.isNotEmpty()) {
                 operacaoRepository.falhaPermanente(esgotados, mensagem)

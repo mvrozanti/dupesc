@@ -27,5 +27,5 @@ interface OperacaoRepository {
     fun marcarRecusado(id: Long, errosJson: String): Boolean
     fun buscarPorReferencia(referenciaExterna: String): OperacaoLinha?
     fun buscarLotesEnviados(idadeMin: Instant): List<LoteEnviado>
-    fun contarPendentes(): Long
+    fun reprocessar(id: Long): Boolean
 }

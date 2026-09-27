@@ -149,10 +149,10 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
             }
             .list()
 
-    override fun contarPendentes(): Long =
-        jdbc.sql("SELECT count(*) FROM outbox WHERE status = 'PENDENTE'")
-            .query(Long::class.java)
-            .single()!!
+    override fun reprocessar(id: Long): Boolean =
+        jdbc.sql("UPDATE operacao SET estado = 'PENDENTE', atualizado_em = now() WHERE id = :id AND estado = 'FALHA_PERMANENTE'")
+            .param("id", id)
+            .update() == 1
 
     private fun estadosSql(evento: EventoOperacao): Set<String> =
         StateMachine.origens(evento).map { it.name }.toSet()

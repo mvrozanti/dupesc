@@ -154,4 +154,16 @@ class OutboxRepositoryJdbc(
             .query { rs, _ -> rs.getDouble(1).toLong() }
             .optional()
             .orElse(null)
+
+    override fun contarPendentes(): Long =
+        jdbc.sql("SELECT count(*) FROM outbox WHERE status = 'PENDENTE'")
+            .query(Long::class.java)
+            .single()!!
+
+    override fun reprocessar(operacaoId: Long): Boolean =
+        jdbc.sql(
+            "UPDATE outbox SET status = 'PENDENTE', next_attempt_at = now(), attempt_count = 0, atualizado_em = now() WHERE operacao_id = :id AND status = 'DLQ'",
+        )
+            .param("id", operacaoId)
+            .update() == 1
 }
