@@ -1,5 +1,7 @@
 .git
-build
 .gradle
 .idea
 .env
+build/*
+!build/libs
+build/libs/*-plain.jar

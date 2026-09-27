@@ -70,7 +70,7 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
         jdbc.sql(
             """
             UPDATE operacao SET estado = 'REGISTRADO', operation_id = :iud, atualizado_em = now()
-            WHERE id = :id AND estado IN (:estados)
+            WHERE id = :id AND estado IN (:estados) AND (operation_id IS NULL OR operation_id = :iud)
             """.trimIndent(),
         )
             .param("iud", iud)

@@ -16,7 +16,11 @@ data class EventoLoteFinalizado(
 )
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
-data class ItemProcessado(val referenciaExterna: String, val iud: String)
+data class ItemProcessado(
+    val referenciaExterna: String,
+    @JsonProperty("identificador_item_processado")
+    val iud: String,
+)
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class ItemInvalido(val referenciaExterna: String?, val erros: List<ErroRegistradora>)

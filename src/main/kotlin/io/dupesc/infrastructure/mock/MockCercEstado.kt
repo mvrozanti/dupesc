@@ -59,8 +59,9 @@ class MockCercEstado(
     var referenciaRejeitada: String? = null
 
     fun criarLote(itens: List<Map<String, Any?>>): String {
-        val id = "lote-${contador.incrementAndGet()}"
-        lotes[id] = LoteMock(id, itens, objectMapper)
+        val numero = contador.incrementAndGet()
+        val id = "lote-$numero"
+        lotes[id] = LoteMock(id, numero, itens, objectMapper)
         scheduler.schedule({ processar(id) }, 2, TimeUnit.SECONDS)
         return id
     }
@@ -127,6 +128,7 @@ class MockCercEstado(
 
 private class LoteMock(
     val idLote: String,
+    private val numero: Int,
     val itens: List<Map<String, Any?>>,
     private val objectMapper: ObjectMapper,
 ) {
@@ -134,8 +136,8 @@ private class LoteMock(
     val processados = mutableListOf<ItemProcessadoLote>()
     val invalidados = mutableListOf<ItemInvalidoLote>()
     val eventId: String = UUID.randomUUID().toString()
-    private val iudBase = System.nanoTime().toString(36)
 
+    @Synchronized
     fun processar(referenciaRejeitada: String?) {
         itens.forEachIndexed { indice, item ->
             val referencia = item["referencia_externa"] as? String ?: return@forEachIndexed
@@ -170,5 +172,5 @@ private class LoteMock(
     )
 
     private fun iud(indice: Int): String =
-        ("IUD" + iudBase + indice.toString(36)).take(20).padEnd(20, '0')
+        ("IUD" + numero.toString(36) + "X" + indice.toString(36).padStart(5, '0')).take(20)
 }

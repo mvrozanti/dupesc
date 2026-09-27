@@ -2,7 +2,7 @@
 set -euo pipefail
 
 sql() { docker compose exec -T postgres psql -U dupesc -d dupesc -tAc "$1"; }
-cerc() { curl -sf -X POST "http://localhost:8081/mock/cerc/$1" -H 'Content-Type: application/json' -d "${2:-{}}"; }
+cerc() { curl -sf -X POST "http://localhost:18081/mock/cerc/$1" -H 'Content-Type: application/json' -d "${2:-{}}"; }
 passo() { printf '\n\033[1;36m=== %s ===\033[0m\n' "$1"; }
 aguardar() {
     local desc="$1" cond="$2" limite="${3:-180}"
@@ -19,11 +19,13 @@ estados() {
 }
 
 passo "Subindo stack (postgres + 2 pods + mocks)"
+./gradlew bootJar -q
+docker compose down -v 2>/dev/null || true
 docker compose up -d --build
-aguardar "app saudavel" "curl -sf http://localhost:8091/actuator/health && curl -sf http://localhost:8092/actuator/health" 240
+aguardar "app saudavel" "curl -sf http://localhost:18091/actuator/health && curl -sf http://localhost:18092/actuator/health" 240
 
 passo "Seed: 2500 operacoes no legado"
-curl -sf -X POST http://localhost:8082/mock/legado/reiniciar -H 'Content-Type: application/json' -d '{"total": 2500}' >/dev/null
+curl -sf -X POST http://localhost:18082/mock/legado/reiniciar -H 'Content-Type: application/json' -d '{"total": 2500}' >/dev/null
 
 passo "PROVA 1 — legado vira duplicata registrada (2 pods, zero duplicatas)"
 aguardar "2500 registradas" "[ \"\$(sql \"SELECT count(*) FROM operacao WHERE estado='REGISTRADO'\")\" = 2500 ]"
@@ -32,14 +34,14 @@ echo "  intencoes: $(sql 'SELECT count(*) FROM intencao') | titulos: $(sql 'SELE
 
 passo "PROVA 4 — webhook repetido 3x processa 1x"
 evento="$(sql "SELECT event_id FROM eventos_recebidos LIMIT 1")"
-curl -sf -X POST http://localhost:8081/mock/cerc/replay -H 'Content-Type: application/json' \
+curl -sf -X POST http://localhost:18081/mock/cerc/replay -H 'Content-Type: application/json' \
     -d "{\"eventId\":\"$evento\",\"vezes\":3}" >/dev/null
 sleep 3
 echo "  eventos apos replay: $(sql 'SELECT count(*) FROM eventos_recebidos') (esperado: igual ao anterior)"
 
 passo "PROVA 3 — pod morre no meio do envio, reconciliacao resolve"
 cerc modo '{"modo":"processando_eterno"}'
-curl -sf -X POST http://localhost:8082/mock/legado/reiniciar -H 'Content-Type: application/json' -d '{"total": 2600}' >/dev/null
+curl -sf -X POST http://localhost:18082/mock/legado/reiniciar -H 'Content-Type: application/json' -d '{"total": 2600}' >/dev/null
 aguardar "100 novas ENVIADO" "[ \"\$(sql \"SELECT count(*) FROM operacao WHERE estado='ENVIADO'\")\" -ge 100 ]"
 echo "  matando app-1 (o pod que enviou os lotes pendentes)"
 docker compose kill app-1

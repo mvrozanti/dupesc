@@ -110,7 +110,8 @@ abstract class WireMockTestBase : PostgresTestBase() {
         iud: String = "IUD000000000000000001",
     ): String =
         """{"event_id":"$eventId","tipo":"lote-finalizado","lote_id":"$loteId","status":"PROCESSADO",""" +
-            """"itens_processados":[{"referencia_externa":"$referencia","iud":"$iud"}],"itens_invalidos":[]}"""
+            """"itens_processados":[{"referencia_externa":"$referencia","identificador_item_processado":"$iud"}],""" +
+            """"itens_invalidos":[]}"""
 
     protected fun assinar(corpo: String): String {
         val mac = Mac.getInstance("HmacSHA256")

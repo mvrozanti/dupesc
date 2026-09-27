@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: dupesc
       POSTGRES_PASSWORD: dupesc
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -28,7 +28,7 @@ services:
       DUPE_WORKER_BATCH: 200
       DUPE_POD_ID: app-1
     ports:
-      - "8091:8080"
+      - "18091:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,7 +39,7 @@ services:
       <<: *app-env
       DUPE_POD_ID: app-2
     ports:
-      - "8092:8080"
+      - "18092:8080"
 
   cerc-mock:
     build: .
@@ -51,7 +51,7 @@ services:
       DUPE_CERC_WEBHOOK_SECRET: poc-secret
       DUPE_MOCK_WEBHOOK_DESTINO: http://app-1:8080,http://app-2:8080
     ports:
-      - "8081:8080"
+      - "18081:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,7 +64,7 @@ services:
       DUPE_DB_USER: dupesc
       DUPE_DB_PASSWORD: dupesc
     ports:
-      - "8082:8080"
+      - "18082:8080"
     depends_on:
       postgres:
         condition: service_healthy
