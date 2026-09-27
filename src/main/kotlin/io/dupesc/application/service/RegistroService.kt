@@ -55,7 +55,14 @@ class RegistroService(
             }
         }
         if (validos.isEmpty()) return
+        enviar(validos, registradora, claimsPorId)
+    }
 
+    private fun enviar(
+        validos: List<Pair<Long, RegistroComando>>,
+        registradora: String,
+        claimsPorId: Map<Long, Claim>,
+    ) {
         if (!rateLimiterDb.adquirirPermissao(registradora)) {
             tratarFalhaEnvio(validos, claimsPorId, RegistradoraException("limite de taxa global", retryavel = true, naoEsgota = true))
             return
@@ -72,8 +79,27 @@ class RegistroService(
             }
             log.info("lote {} enviado com {} operacoes para {} pelo pod {}", handle.id, validos.size, registradora, properties.podId)
         } catch (e: RegistradoraException) {
+            if (!e.retryavel && validos.size > 1) {
+                bissectar(validos, registradora, claimsPorId, e)
+                return
+            }
             tratarFalhaEnvio(validos, claimsPorId, e)
         }
+    }
+
+    private fun bissectar(
+        validos: List<Pair<Long, RegistroComando>>,
+        registradora: String,
+        claimsPorId: Map<Long, Claim>,
+        e: RegistradoraException,
+    ) {
+        val meio = validos.size / 2
+        log.warn(
+            "lote de {} rejeitado ({}) — bissectando em {} e {} para isolar o item ruim",
+            validos.size, e.message, meio, validos.size - meio,
+        )
+        enviar(validos.take(meio), registradora, claimsPorId)
+        enviar(validos.drop(meio), registradora, claimsPorId)
     }
 
     private fun tratarFalhaEnvio(

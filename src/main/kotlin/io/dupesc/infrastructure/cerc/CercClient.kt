@@ -83,9 +83,18 @@ class CercClient(
                 tokenCache = null
                 RegistradoraException("credencial invalida (401)", retryavel = true, naoEsgota = true)
             }
+            in ROTA_OU_ACESSO -> RegistradoraException(
+                "rota ou acesso da CERC rejeitado (HTTP ${res.statusCode.value()}) — conferir configuracao",
+                retryavel = true,
+                naoEsgota = true,
+            )
             423 -> RegistradoraException("fora da janela operacional da CERC", retryavel = true, naoEsgota = true)
             429 -> RegistradoraException("limite de taxa da CERC", retryavel = true, naoEsgota = true)
             in 400..499 -> RegistradoraException("rejeitado pela CERC (HTTP ${res.statusCode.value()})", retryavel = false)
             else -> RegistradoraException("erro tecnico da CERC (HTTP ${res.statusCode.value()})", retryavel = true)
         }
+
+    companion object {
+        private val ROTA_OU_ACESSO = setOf(403, 404, 405, 408, 415)
+    }
 }
