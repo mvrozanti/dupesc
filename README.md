@@ -124,6 +124,15 @@ Testes: `./gradlew test` — Testcontainers (Postgres 16) + WireMock.
 6. **Bloat do outbox**: `PROCESSADO` vira trilha de auditoria; autovacuum cobre; evolução
    natural é particionamento mensal.
 
+## Decisões (ADR)
+
+- **ADR-001 — fila transacional no Postgres, sem broker.** No volume real
+  (< 500 mil/dia; gargalo = CERC a 80 req/s), Kafka no caminho crítico adiciona hops,
+  infra nova e arestas M×N sem tocar o gargalo — e não entrega "não perder" sem
+  outbox+CDC. Aqui a fila É o estado: ack = transição de linha na mesma transação.
+  Kafka entra **se/quando** houver fan-out real (vários consumidores independentes),
+  pendurado no outbox via CDC — nunca no caminho crítico.
+
 ## Próximas fases
 
 - Profile `cerc-homolog` (produção assistida da CERC — troca só de env).
