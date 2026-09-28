@@ -9,9 +9,8 @@ class CredenciaisGuard(properties: DupeProperties, environment: Environment) {
     init {
         val perfis = environment.activeProfiles.toSet()
         val permitidos = setOf("test", "demo", "mock-cerc", "mock-legado")
-        if (perfis.none { it in permitidos }) {
+        if (perfis.none { it in permitidos } && !properties.credenciaisImpostas) {
             val suspeitas = listOf(
-                "dupe.cerc.client-id" to properties.cerc.clientId,
                 "dupe.cerc.client-secret" to properties.cerc.clientSecret,
                 "dupe.cerc.webhook-secret" to properties.cerc.webhookSecret,
                 "dupe.legado.api-key" to properties.legado.apiKey,

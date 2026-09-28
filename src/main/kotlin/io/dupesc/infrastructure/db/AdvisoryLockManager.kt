@@ -37,8 +37,13 @@ class AdvisoryLockManager(private val dataSource: DataSource) {
 
     private fun descartar(conn: Connection, lockId: Long) {
         log.error("advisory lock {} nao foi liberado — descartando a conexao para nao vazar o lock no pool", lockId)
-        runCatching { dataSource.unwrap(HikariDataSource::class.java).evictConnection(conn) }
+        val descartada = runCatching { dataSource.unwrap(HikariDataSource::class.java).evictConnection(conn) }
             .onFailure { log.error("nao foi possivel descartar a conexao do pool", it) }
+            .isSuccess
+        if (!descartada) {
+            runCatching { executar(conn, "SELECT pg_terminate_backend(pg_backend_pid())") }
+                .onFailure { log.error("nao foi possivel encerrar a sessao que segura o lock {}", lockId, it) }
+        }
         runCatching { conn.close() }
     }
 

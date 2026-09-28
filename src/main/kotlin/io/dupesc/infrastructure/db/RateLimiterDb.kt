@@ -20,10 +20,10 @@ class RateLimiterDb(
         return jdbc.sql(
             """
             UPDATE rate_limit SET
-                tokens = LEAST(:rps, tokens + extract(epoch FROM (now() - atualizado_em)) * :rps) - 1,
-                atualizado_em = now()
+                tokens = LEAST(:rps, tokens + extract(epoch FROM (clock_timestamp() - atualizado_em)) * :rps) - 1,
+                atualizado_em = clock_timestamp()
             WHERE registradora = :r
-              AND LEAST(:rps, tokens + extract(epoch FROM (now() - atualizado_em)) * :rps) >= 1
+              AND LEAST(:rps, tokens + extract(epoch FROM (clock_timestamp() - atualizado_em)) * :rps) >= 1
             """.trimIndent(),
         )
             .param("rps", rps)
