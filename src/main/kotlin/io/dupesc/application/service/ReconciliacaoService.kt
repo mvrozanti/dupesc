@@ -6,9 +6,11 @@ import io.dupesc.domain.model.ProcessamentoEstado
 import io.dupesc.domain.port.RegistradoraException
 import io.dupesc.domain.repository.DlqRepository
 import io.dupesc.domain.repository.LoteEnviado
+import io.dupesc.domain.repository.OperacaoLinha
 import io.dupesc.domain.repository.OperacaoRepository
 import io.dupesc.domain.repository.OrigemDlq
 import io.dupesc.domain.repository.OutboxRepository
+import io.dupesc.domain.repository.ResultadoTitulo
 import io.dupesc.domain.repository.TituloRepository
 import io.dupesc.infrastructure.configuration.DupeProperties
 import io.dupesc.infrastructure.db.AdvisoryLockManager
@@ -93,7 +95,7 @@ class ReconciliacaoService(
                     val iud = item.operationId ?: return@forEach
                     if (transactionTemplate.execute {
                             if (operacaoRepository.marcarRegistrado(operacao.id, iud)) {
-                                tituloRepository.inserirSeNovo(iud, operacao.duplicataId, operacao.id)
+                                registrarTitulo(operacao, iud, lote.registradora)
                                 true
                             } else {
                                 false
@@ -114,6 +116,17 @@ class ReconciliacaoService(
         }
         log.info("lote {} reconciliado: {} itens resolvidos", lote.loteId, resolvidos)
         return resolvidos
+    }
+
+    private fun registrarTitulo(operacao: OperacaoLinha, iud: String, registradora: String) {
+        if (tituloRepository.inserirSeNovo(iud, operacao.duplicataId, operacao.id, registradora) ==
+            ResultadoTitulo.CONFLITO_ATIVO
+        ) {
+            val erro = "duplicata ${operacao.duplicataId} ja tem titulo ativo — registro duplicado em $registradora " +
+                "(iud $iud, referencia ${operacao.referenciaExterna})"
+            log.error(erro)
+            dlqRepository.inserir(OrigemDlq.OUTBOX, operacao.id, "{}", erro)
+        }
     }
 
     private fun resetar(lote: LoteEnviado) {

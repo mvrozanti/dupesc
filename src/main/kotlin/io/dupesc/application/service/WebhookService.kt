@@ -8,6 +8,7 @@ import io.dupesc.domain.repository.EventoRepository
 import io.dupesc.domain.repository.OperacaoLinha
 import io.dupesc.domain.repository.OperacaoRepository
 import io.dupesc.domain.repository.OrigemDlq
+import io.dupesc.domain.repository.ResultadoTitulo
 import io.dupesc.domain.repository.TituloRepository
 import org.slf4j.LoggerFactory
 import org.springframework.dao.TransientDataAccessException
@@ -48,19 +49,19 @@ class WebhookService(
         val novo = eventoRepository.registrarSeNovo(registradora, evento.eventId, evento.tipo, corpo)
         if (!novo) return false
         when (evento.statusLote) {
-            ProcessamentoEstado.PROCESSADO -> aplicarProcessados(evento)
+            ProcessamentoEstado.PROCESSADO -> aplicarProcessados(registradora, evento)
             ProcessamentoEstado.REJEITADO -> aplicarInvalidos(evento)
             else -> Unit
         }
         return true
     }
 
-    private fun aplicarProcessados(evento: EventoLoteFinalizado) {
+    private fun aplicarProcessados(registradora: String, evento: EventoLoteFinalizado) {
         evento.itensProcessados.forEach { item ->
             val operacao = operacaoRepository.buscarPorReferencia(item.referenciaExterna) ?: return@forEach
             validarLote(operacao, evento.loteId)
             if (operacaoRepository.marcarRegistrado(operacao.id, item.iud)) {
-                tituloRepository.inserirSeNovo(item.iud, operacao.duplicataId, operacao.id)
+                registrarTitulo(operacao, item.iud, registradora)
             }
         }
     }
@@ -71,6 +72,17 @@ class WebhookService(
             val operacao = operacaoRepository.buscarPorReferencia(referencia) ?: return@forEach
             validarLote(operacao, evento.loteId)
             operacaoRepository.marcarRecusado(operacao.id, objectMapper.writeValueAsString(item.erros))
+        }
+    }
+
+    private fun registrarTitulo(operacao: OperacaoLinha, iud: String, registradora: String) {
+        if (tituloRepository.inserirSeNovo(iud, operacao.duplicataId, operacao.id, registradora) ==
+            ResultadoTitulo.CONFLITO_ATIVO
+        ) {
+            val erro = "duplicata ${operacao.duplicataId} ja tem titulo ativo — registro duplicado em $registradora " +
+                "(iud $iud, referencia ${operacao.referenciaExterna})"
+            log.error(erro)
+            dlqRepository.inserir(OrigemDlq.WEBHOOK, operacao.id, "{}", erro)
         }
     }
 
