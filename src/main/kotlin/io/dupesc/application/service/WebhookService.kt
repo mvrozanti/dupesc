@@ -59,7 +59,7 @@ class WebhookService(
     private fun aplicarProcessados(registradora: String, evento: EventoLoteFinalizado) {
         evento.itensProcessados.forEach { item ->
             val operacao = operacaoRepository.buscarPorReferencia(item.referenciaExterna) ?: return@forEach
-            validarLote(operacao, evento.loteId)
+            if (!loteConfere(operacao, evento.loteId)) return@forEach
             if (operacaoRepository.marcarRegistrado(operacao.id, item.iud)) {
                 registrarTitulo(operacao, item.iud, registradora)
             }
@@ -70,7 +70,7 @@ class WebhookService(
         evento.itensInvalidos.forEach { item ->
             val referencia = item.referenciaExterna ?: return@forEach
             val operacao = operacaoRepository.buscarPorReferencia(referencia) ?: return@forEach
-            validarLote(operacao, evento.loteId)
+            if (!loteConfere(operacao, evento.loteId)) return@forEach
             operacaoRepository.marcarRecusado(operacao.id, objectMapper.writeValueAsString(item.erros))
         }
     }
@@ -86,13 +86,11 @@ class WebhookService(
         }
     }
 
-    private fun validarLote(operacao: OperacaoLinha, loteId: String) {
-        if (operacao.loteId != loteId) {
-            throw WebhookPoisonException(
-                "lote_id $loteId nao confere com ${operacao.loteId} para ${operacao.referenciaExterna}",
-            )
-        }
+    private fun loteConfere(operacao: OperacaoLinha, loteId: String): Boolean {
+        if (operacao.loteId == loteId) return true
+        val erro = "lote_id $loteId nao confere com ${operacao.loteId} para ${operacao.referenciaExterna}"
+        log.warn("item do webhook ignorado: {}", erro)
+        dlqRepository.inserir(OrigemDlq.WEBHOOK, operacao.id, "{}", erro)
+        return false
     }
 }
-
-class WebhookPoisonException(message: String) : RuntimeException(message)
