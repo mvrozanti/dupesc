@@ -17,6 +17,7 @@ import io.dupesc.infrastructure.db.RateLimiterDb
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
+import java.time.Instant
 
 @Service
 class RegistroService(
@@ -55,14 +56,34 @@ class RegistroService(
             }
         }
         if (validos.isEmpty()) return
-        enviar(validos, registradora, claimsPorId)
+        enviar(validos, registradora, claimsPorId, prazo(validos, claimsPorId))
+    }
+
+    private fun prazo(validos: List<Pair<Long, RegistroComando>>, claimsPorId: Map<Long, Claim>): Instant {
+        val fim = validos.mapNotNull { claimsPorId[it.first]?.claimedUntil }.minOrNull() ?: return Instant.MAX
+        val margem = (properties.worker.leaseMs * MARGEM_LEASE).toLong()
+        return fim.minusMillis(margem)
     }
 
     private fun enviar(
         validos: List<Pair<Long, RegistroComando>>,
         registradora: String,
         claimsPorId: Map<Long, Claim>,
+        prazo: Instant,
     ) {
+        if (Instant.now().isAfter(prazo)) {
+            log.warn(
+                "lease perto de vencer — {} operacoes devolvidas a fila sem enviar (pod {})",
+                validos.size, properties.podId,
+            )
+            tratarFalhaEnvio(
+                validos,
+                claimsPorId,
+                RegistradoraException("lease insuficiente para concluir o envio", retryavel = true, naoEsgota = true),
+            )
+            return
+        }
+
         if (!rateLimiterDb.adquirirPermissao(registradora)) {
             tratarFalhaEnvio(validos, claimsPorId, RegistradoraException("limite de taxa global", retryavel = true, naoEsgota = true))
             return
@@ -79,8 +100,8 @@ class RegistroService(
             }
             log.info("lote {} enviado com {} operacoes para {} pelo pod {}", handle.id, validos.size, registradora, properties.podId)
         } catch (e: RegistradoraException) {
-            if (!e.retryavel && validos.size > 1) {
-                bissectar(validos, registradora, claimsPorId, e)
+            if (e.rejeicaoDeConteudo && validos.size > 1) {
+                bissectar(validos, registradora, claimsPorId, prazo, e)
                 return
             }
             tratarFalhaEnvio(validos, claimsPorId, e)
@@ -91,6 +112,7 @@ class RegistroService(
         validos: List<Pair<Long, RegistroComando>>,
         registradora: String,
         claimsPorId: Map<Long, Claim>,
+        prazo: Instant,
         e: RegistradoraException,
     ) {
         val meio = validos.size / 2
@@ -98,8 +120,8 @@ class RegistroService(
             "lote de {} rejeitado ({}) — bissectando em {} e {} para isolar o item ruim",
             validos.size, e.message, meio, validos.size - meio,
         )
-        enviar(validos.take(meio), registradora, claimsPorId)
-        enviar(validos.drop(meio), registradora, claimsPorId)
+        enviar(validos.take(meio), registradora, claimsPorId, prazo)
+        enviar(validos.drop(meio), registradora, claimsPorId, prazo)
     }
 
     private fun tratarFalhaEnvio(
@@ -123,7 +145,10 @@ class RegistroService(
         }
         val retryaveis = ids.filterNot { it in esgotados }
         transactionTemplate.executeWithoutResult {
-            if (retryaveis.isNotEmpty()) {
+            if (retryaveis.isNotEmpty() && e.naoEsgota) {
+                outboxRepository.falhaRetryavel(retryaveis, retryPolicy.atrasoEspera(), mensagem)
+                operacaoRepository.falhaRetryavel(retryaveis, mensagem)
+            } else if (retryaveis.isNotEmpty()) {
                 retryaveis.groupBy { claimsPorId[it]?.attemptCount ?: 1 }.forEach { (attempt, grupo) ->
                     val atraso = retryPolicy.atrasoMs(attempt)
                     outboxRepository.falhaRetryavel(grupo, atraso, mensagem)
@@ -148,6 +173,10 @@ class RegistroService(
             ids.forEach { id -> dlqRepository.inserir(OrigemDlq.OUTBOX, id, payloads[id] ?: "{}", erro) }
         }
         log.warn("{} operacoes para DLQ (erro permanente): {}", ids.size, erro)
+    }
+
+    private companion object {
+        const val MARGEM_LEASE = 0.25
     }
 
     private fun falhaPermanente(ids: List<Long>, erro: String) {

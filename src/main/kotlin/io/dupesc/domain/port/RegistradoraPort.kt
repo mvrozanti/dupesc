@@ -13,4 +13,5 @@ class RegistradoraException(
     message: String,
     val retryavel: Boolean,
     val naoEsgota: Boolean = false,
+    val rejeicaoDeConteudo: Boolean = false,
 ) : RuntimeException(message)

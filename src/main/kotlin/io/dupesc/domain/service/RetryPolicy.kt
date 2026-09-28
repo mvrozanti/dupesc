@@ -15,5 +15,8 @@ class RetryPolicy(
         return (exponencial * jitter).toLong()
     }
 
-    fun esgotou(attempt: Int) = attempt >= maxAttempts
+    fun atrasoEspera(): Long {
+        val jitter = 0.7 + random.nextDouble() * 0.6
+        return (baseMs * jitter).toLong()
+    }
 }

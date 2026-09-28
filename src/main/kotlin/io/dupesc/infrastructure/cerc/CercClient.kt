@@ -90,7 +90,11 @@ class CercClient(
             )
             423 -> RegistradoraException("fora da janela operacional da CERC", retryavel = true, naoEsgota = true)
             429 -> RegistradoraException("limite de taxa da CERC", retryavel = true, naoEsgota = true)
-            in 400..499 -> RegistradoraException("rejeitado pela CERC (HTTP ${res.statusCode.value()})", retryavel = false)
+            in 400..499 -> RegistradoraException(
+                "rejeitado pela CERC (HTTP ${res.statusCode.value()})",
+                retryavel = false,
+                rejeicaoDeConteudo = true,
+            )
             else -> RegistradoraException("erro tecnico da CERC (HTTP ${res.statusCode.value()})", retryavel = true)
         }
 
