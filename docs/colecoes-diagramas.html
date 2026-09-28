@@ -181,14 +181,14 @@ const K = {
       end
       ingress --> P
       P --> E --> V
-      E --> P : retry
+      E -->|retry| P
       V --> cerc
-      cerc --> R : webhook
-      cerc --> X : rejeição
-      V --> R : reconciliação
-      V --> X : negócio
-      E --> D : esgotado
-      V --> D : preso
+      cerc -->|webhook| R
+      cerc -->|rejeição| X
+      V -->|reconciliação| R
+      V -->|negócio| X
+      E -->|esgotado| D
+      V -->|preso| D
       classDef ext fill:#ffe0b2,stroke:#e65100,stroke-width:2px
       classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
       classDef ok fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px

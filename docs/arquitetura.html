@@ -275,19 +275,19 @@ flowchart TD
     INDETERMINADO("INDETERMINADO&lt;br/&gt;desfecho desconhecido&lt;br/&gt;conferência manual")
   end
 
-  ingress --&gt; PENDENTE : "grava intenção+operação+outbox"
-  PENDENTE --&gt; EM_ENVIO : "claim"
-  EM_ENVIO --&gt; ENVIADO : "POST lote ok"
-  EM_ENVIO --&gt; PENDENTE : "retry · lease expirado"
-  ENVIADO --&gt; cerc : "lote"
-  cerc --&gt; REGISTRADO : "webhook · lote-finalizado"
-  cerc --&gt; RECUSADO : "rejeição"
-  ENVIADO --&gt; REGISTRADO : "reconciliação · consulta"
-  ENVIADO --&gt; RECUSADO : "rejeição de negócio"
-  ENVIADO --&gt; DLQ : "erro persistente"
-  EM_ENVIO --&gt; DLQ : "tentativas esgotadas"
-  ENVIADO --&gt; INDETERMINADO : "limite de consultas sem desfecho"
-  INDETERMINADO --&gt; DLQ : "entra na revisão, sem reenvio automático"
+  ingress ----&gt; PENDENTE : "grava intenção+operação+outbox"gt;|"grava intenção+operação+outbox"| PENDENTE
+  PENDENTE ----&gt; EM_ENVIO : "claim"gt;|"claim"| EM_ENVIO
+  EM_ENVIO ----&gt; ENVIADO : "POST lote ok"gt;|"POST lote ok"| ENVIADO
+  EM_ENVIO ----&gt; PENDENTE : "retry · lease expirado"gt;|"retry · lease expirado"| PENDENTE
+  ENVIADO ----&gt; cerc : "lote"gt;|"lote"| cerc
+  cerc ----&gt; REGISTRADO : "webhook · lote-finalizado"gt;|"webhook · lote-finalizado"| REGISTRADO
+  cerc ----&gt; RECUSADO : "rejeição"gt;|"rejeição"| RECUSADO
+  ENVIADO ----&gt; REGISTRADO : "reconciliação · consulta"gt;|"reconciliação · consulta"| REGISTRADO
+  ENVIADO ----&gt; RECUSADO : "rejeição de negócio"gt;|"rejeição de negócio"| RECUSADO
+  ENVIADO ----&gt; DLQ : "erro persistente"gt;|"erro persistente"| DLQ
+  EM_ENVIO ----&gt; DLQ : "tentativas esgotadas"gt;|"tentativas esgotadas"| DLQ
+  ENVIADO ----&gt; INDETERMINADO : "limite de consultas sem desfecho"gt;|"limite de consultas sem desfecho"| INDETERMINADO
+  INDETERMINADO ----&gt; DLQ : "entra na revisão, sem reenvio automático"gt;|"entra na revisão, sem reenvio automático"| DLQ
 
   classDef extc fill:#ffe0b2,stroke:#e65100,stroke-width:2px
   classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
