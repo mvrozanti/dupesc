@@ -583,13 +583,147 @@ para fazer com slideware.
 
 ---
 
+---
+
+## 11. Caso de negócio FIDC
+
+### 11.1 "O FIDC precisa do lastro, não só da escrituração. Isso atende?" 🟡
+
+O marco de janeiro é só escrituração/registro — o título registrado vira lastro
+auditável. O que vem depois (negociação/cessão para o fundo) é outro passo, não
+coberto aqui. **Limite:** se o prazo real exigir cessão eletrônica, isto entrega a
+metade de baixo (o registro), não a de cima (a transferência).
+
+### 11.2 "E a baixa/liquidação quando o devedor paga?" 🔴
+
+Não há comando de liquidação/baixa. A registradora tem o endpoint, mas a port só
+sabe registrar — uma duplicata paga fica REGISTRADA até alguém fora do sistema
+liquidá-la. **Limite:** é um comando novo no modelo (mesma família do
+cancelar/alterar), não mapeado na `RegistradoraPort`.
+
+### 11.3 "E a cessão/transferência do título entre cedentes?" 🔴
+
+Não existe. O modelo trata o sacador como fixo no payload. Cessão de recebível
+(endosso eletrônico) é outro comando, outro fluxo, outra API da registradora. Fora
+do escopo e fora do modelo.
+
+### 11.4 "E a manifestação/aceite do sacado?" 🔴
+
+Não há. O sacado não interage com este sistema; ciência/aceite é tratada pela
+registradora. **Limite:** se o processo exigir o sacado confirmar antes do
+registro, entra como integração nova.
+
+### 11.5 "Isto é um registrador de duplicata ou um motor de FIDC completo?" 🟡
+
+Um registrador de duplicata, com fila e idempotência feitas para produção. Não é o
+motor de FIDC inteiro (originação, cessão, liquidação, marcação a mercado). A
+decisão é consciente: o marco de janeiro é o registro.
+
+---
+
+## 12. Falhas de infraestrutura profundas
+
+### 12.1 "Registradora fora do ar por dias, não só fora da janela?" 🟡
+
+A fila acumula e o backoff cresce até o teto; o leitor pausa a ingestão quando a
+fila passa de `max-queue-pendente`, e o backfill retoma pelo cursor. **Limite:**
+dias fora + volume alto pode encostar no teto e parar a ingestão; o alerta cobre o
+tamanho da fila, não o fato de o leitor ter pausado.
+
+### 12.2 "Relógio dos pods dessincronizado (clock skew)?" 🟡
+
+Lease e idade usam `now()` do banco, não dos pods — o Postgres é a fonte do
+relógio. O residual é o `atrasoMs` do backoff calculado na JVM, que distorce o
+atraso mas não quebra invariante. **Limite:** relógio muito adiantado agenda o
+retry mais cedo; não perde dado.
+
+### 12.3 "Partição de rede (split-brain)?" 🟢
+
+Não há eleição de líder: singleton jobs usam advisory lock no banco e o worker usa
+SKIP LOCKED. Se a rede racha, cada lado fala com o banco e o banco decide — não há
+dois líderes porque não há líder. Pior caso: um lado não alcança o banco e fica
+parado, com o lease vencendo para o outro.
+
+### 12.4 "Banco lento, não caído?" 🟡
+
+Degrada sem perder: timeouts HTTP e transações curtas não seguram conexão; a fila
+cresce e o alerta de idade dispara. **Limite:** não há breaker contra o próprio
+banco lento — as queries esperam o timeout do pool, e um banco travado de vez
+pendura as conexões até o Hikari estourar.
+
+### 12.5 "Quem vigia o vigia — e se o AlertaJob morrer?" 🟡
+
+Nada interno: o AlertaJob é mais um `@Scheduled`; se o scheduler morre, morre
+calado. **Limite:** a proteção de verdade é externa (Prometheus sem métrica nova =
+alerta de staleness). Não há watcher do watcher dentro do processo.
+
+### 12.6 "Healthcheck UP mas a fila parada?" 🟡
+
+O `/actuator/health` vê o processo vivo, não o progresso. Um worker parado por bug
+mantém o health UP. **Limite:** a detecção correta é a métrica de idade da fila
+subindo, não o healthcheck — está coberto por métrica, não por health.
+
+---
+
+## 13. Ordenação de comandos
+
+### 13.1 "Registrar + cancelar chegam fora de ordem — como garante?" 🔴
+
+Não garante, porque cancelar/alterar ainda não existem (6.4). Quando entrarem,
+precisam de ordenação por (duplicata, sequência) ou versionamento — senão um
+cancelar que chega antes do registrar é rejeitado ou perdido. Mesma lacuna do
+comando, agravada pela ordem.
+
+### 13.2 "Dois comandos diferentes para o mesmo id — qual vence?" 🔴
+
+Hoje nem existe o segundo comando: `operacao_legado_id UNIQUE` descarta o reenvio.
+Quando houver registrar+cancelar+liquidar, a chave de dedup vira (id + tipo de
+comando) e a ordem de aplicação vira regra de negócio (último vence? terminal
+bloqueia?). Não decidido.
+
+### 13.3 "event_id reenviado com payload divergente — qual prevalece?" 🟡
+
+A dedup assume id único = payload único: o primeiro INSERT em `eventos_recebidos`
+vence e os seguintes são ignorados. **Limite:** se a registradora reutilizar um
+event_id com conteúdo diferente, o primeiro ganha e o segundo é descartado — mas o
+contrato é id único por evento, e não vimos o contrário.
+
+---
+
+## 14. Segurança residual
+
+### 14.1 "Segredo do webhook vazou — qual o dano e a rotação?" 🟡
+
+Com o segredo, um atacante forja webhooks assinados e marca operações como
+REGISTRADO com IUD arbitrário (dentro do que o 7.4 já cobre). Rotação é trocar a
+env e reiniciar. **Limite:** não há rotação automática, e o HMAC não tem
+nonce/timestamp, então um payload antigo assinado continua aceito enquanto o
+segredo for o mesmo.
+
+### 14.2 "Payload malicioso no legado (injeção)?" 🟢
+
+A duplicata entra como dado (JSON), nunca como comando: o que o legado manda vira
+campo de payload, não SQL executado. O mapper valida e rejeita o resto. O único
+vetor é dado ruim virando RECUSADO na registradora — o caminho normal, não um
+comprometimento.
+
+### 14.3 "SQL injection via id/referência?" 🟢
+
+Todo acesso é JdbcClient com parâmetros nomeados, nunca concatenação com o dado do
+legado. `referencia_externa` é derivada do id via hash, e os ids entram como
+parâmetro. Sem SQL dinâmico montado com entrada externa.
+
 ## Índice do que NÃO defender
 
 Levar para a sala como "conhecido e priorizado", nunca como resolvido:
 
 | # | Item | Gravidade |
 |---|---|---|
-| 6.4 | Sem cancelamento/alteração de duplicata | lacuna funcional |
+| 6.4 | Cancelamento/alteração de duplicata | MVP — entrará na primeira entrega |
+| 11.2 | Baixa/liquidação — comando ausente na port | MVP posterior |
+| 11.3 | Cessão/transferência do título — comando ausente | fora do escopo atual |
+| 11.4 | Manifestação/aceite do sacado — não interage | fora do escopo |
+| 13.1 / 13.2 | Ordenação de comandos (registrar/cancelar/liquidar) — dedup sem chave por tipo | bloqueia comandos |
 | 5.2 | Roteamento entre registradoras — questão jurídica, não técnica | bloqueia multi-registradora |
 | 6.3 | Parcelamento e duplicata de serviço sem teste | não afirmar cobertura |
 | 3.5 | `consultas-limite` global, sem SLA por registradora; saída do limbo é manual | calibração pendente |
