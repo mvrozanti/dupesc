@@ -51,12 +51,12 @@ class ReconciliacaoService(
 
     private fun reconciliarEnviados(): Int {
         val idadeMin = Instant.now().minusMillis(properties.reconciliacao.idadeMinMs)
-        val lotes = operacaoRepository.buscarLotesEnviados(idadeMin)
+        val lotes = operacaoRepository.buscarLotesEnviados(idadeMin, properties.reconciliacao.lotesPorCiclo)
         var resolvidos = 0
-        lotes.forEach { lote ->
+        for (lote in lotes) {
             if (!rateLimiterDb.adquirirPermissao(lote.registradora)) {
-                log.info("teto de taxa atingido — lote {} fica para o proximo ciclo", lote.loteId)
-                return@forEach
+                log.info("teto de taxa atingido — {} lotes ficam para o proximo ciclo", lotes.size - resolvidos)
+                break
             }
             try {
                 val resultado = registry.port(lote.registradora).consultar(EnvioHandle(lote.loteId))
@@ -66,7 +66,7 @@ class ReconciliacaoService(
                     }
                     ProcessamentoEstado.PROCESSADO -> resolvidos += aplicarItens(lote, resultado.itens)
                     ProcessamentoEstado.REJEITADO -> resolvidos += aplicarItens(lote, resultado.itens)
-                    ProcessamentoEstado.ERRO -> resetar(lote)
+                    ProcessamentoEstado.ERRO -> abandonarLoteEmErro(lote)
                 }
             } catch (e: RegistradoraException) {
                 log.warn("consulta do lote {} falhou: {}", lote.loteId, e.message)
@@ -77,13 +77,18 @@ class ReconciliacaoService(
     }
 
     private fun abandonarPresos() {
-        val presas = operacaoRepository.buscarEnviadosPresos(properties.reconciliacao.consultasLimite)
+        val presas = operacaoRepository.buscarEnviadosPresos(
+            properties.reconciliacao.consultasLimite,
+            properties.reconciliacao.lotesPorCiclo,
+        )
         if (presas.isEmpty()) return
         val erro = "desfecho indeterminado na registradora apos limite de consultas"
-        transactionTemplate.executeWithoutResult {
-            operacaoRepository.marcarIndeterminado(presas.map { it.id }, erro)
-            presas.forEach { presa ->
-                dlqRepository.inserir(OrigemDlq.OUTBOX, presa.id, objectMapper.writeValueAsString(presa), erro)
+        presas.chunked(LOTE_ABANDONO).forEach { fatia ->
+            transactionTemplate.executeWithoutResult {
+                operacaoRepository.marcarIndeterminado(fatia.map { it.id }, erro)
+                fatia.forEach { presa ->
+                    dlqRepository.inserir(OrigemDlq.OUTBOX, presa.id, objectMapper.writeValueAsString(presa), erro)
+                }
             }
         }
         log.warn(
@@ -99,7 +104,8 @@ class ReconciliacaoService(
             when (item.estado) {
                 ProcessamentoEstado.PROCESSADO -> {
                     val iud = item.operationId ?: return@forEach
-                    if (transactionTemplate.execute {
+                    val aplicado = runCatching {
+                        transactionTemplate.execute {
                             if (operacaoRepository.marcarRegistrado(operacao.id, iud)) {
                                 registrarTitulo(operacao, iud, lote.registradora)
                                 true
@@ -107,15 +113,21 @@ class ReconciliacaoService(
                                 false
                             }
                         } == true
-                    ) {
-                        resolvidos++
+                    }.getOrElse {
+                        log.error("item {} do lote {} nao aplicado", item.referenciaExterna, lote.loteId, it)
+                        false
                     }
+                    if (aplicado) resolvidos++
                 }
                 ProcessamentoEstado.REJEITADO -> {
-                    transactionTemplate.executeWithoutResult {
-                        operacaoRepository.marcarRecusado(operacao.id, objectMapper.writeValueAsString(item.erros))
+                    runCatching {
+                        transactionTemplate.executeWithoutResult {
+                            operacaoRepository.marcarRecusado(operacao.id, objectMapper.writeValueAsString(item.erros))
+                        }
+                        resolvidos++
+                    }.onFailure {
+                        log.error("item {} do lote {} nao recusado", item.referenciaExterna, lote.loteId, it)
                     }
-                    resolvidos++
                 }
                 else -> Unit
             }
@@ -135,15 +147,20 @@ class ReconciliacaoService(
         }
     }
 
-    private fun resetar(lote: LoteEnviado) {
+    private fun abandonarLoteEmErro(lote: LoteEnviado) {
+        val erro = "lote ${lote.loteId} em ERRO na registradora — desfecho por item desconhecido"
         transactionTemplate.executeWithoutResult {
-            operacaoRepository.resetarParaPendente(lote.operacaoIds)
-            outboxRepository.reabrir(lote.operacaoIds)
+            operacaoRepository.marcarIndeterminado(lote.operacaoIds, erro)
+            lote.operacaoIds.forEach { id -> dlqRepository.inserir(OrigemDlq.OUTBOX, id, "{}", erro) }
         }
-        log.warn("lote {} em ERRO: {} operacoes reenfileiradas", lote.loteId, lote.operacaoIds.size)
+        log.error(
+            "lote {} em ERRO: {} operacoes marcadas INDETERMINADO — conferir na registradora antes de reenviar",
+            lote.loteId, lote.operacaoIds.size,
+        )
     }
 
     companion object {
         const val LOCK_RECONCILIADOR = 741002L
+        private const val LOTE_ABANDONO = 100
     }
 }

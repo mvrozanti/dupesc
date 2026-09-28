@@ -36,13 +36,17 @@ class OutboxRepositoryJdbc(
                                 claimed_until = now() + make_interval(secs => :leaseSeg),
                                 attempt_count = o.attempt_count + 1, atualizado_em = now()
             FROM lote WHERE o.id = lote.outbox_id
-            RETURNING o.operacao_id, o.attempt_count
+            RETURNING o.operacao_id, o.attempt_count, o.claimed_until
             """.trimIndent(),
         )
             .param("tamanho", tamanho)
             .param("pod", podId)
             .param("leaseSeg", leaseMs / 1000.0)
-            .query { rs, _ -> Claim(rs.getLong("operacao_id"), rs.getInt("attempt_count")) }
+            .query { rs, _ -> Claim(
+                operacaoId = rs.getLong("operacao_id"),
+                attemptCount = rs.getInt("attempt_count"),
+                claimedUntil = rs.getTimestamp("claimed_until").toInstant(),
+            ) }
             .list()
             .also { ids ->
                 if (ids.isNotEmpty()) {
@@ -97,14 +101,6 @@ class OutboxRepositoryJdbc(
 
     override fun marcarDlq(operacaoIds: List<Long>) {
         jdbc.sql("UPDATE outbox SET status = 'DLQ', atualizado_em = now() WHERE operacao_id IN (:ids) AND status = 'EM_ENVIO'")
-            .param("ids", operacaoIds)
-            .update()
-    }
-
-    override fun reabrir(operacaoIds: List<Long>) {
-        jdbc.sql(
-            "UPDATE outbox SET status = 'PENDENTE', next_attempt_at = now(), atualizado_em = now() WHERE operacao_id IN (:ids) AND status = 'PROCESSADO'",
-        )
             .param("ids", operacaoIds)
             .update()
     }

@@ -13,6 +13,7 @@ data class DupeProperties(
     val cerc: Cerc = Cerc(),
     val legado: Legado = Legado(),
     val admin: Admin = Admin(),
+    val credenciaisImpostas: Boolean = false,
     val mock: Mock = Mock(),
 ) {
     data class Mock(val webhookDestino: List<String> = emptyList())
@@ -32,6 +33,7 @@ data class DupeProperties(
         val intervaloMs: Long = 300_000,
         val idadeMinMs: Long = 1_800_000,
         val consultasLimite: Int = 12,
+        val lotesPorCiclo: Int = 500,
     )
     data class Leitor(
         val intervaloMs: Long = 5_000,

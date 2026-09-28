@@ -30,11 +30,10 @@ interface OperacaoRepository {
     fun falhaPermanente(ids: List<Long>, erro: String)
     fun incrementarConsultas(ids: List<Long>)
     fun marcarIndeterminado(ids: List<Long>, erro: String)
-    fun buscarEnviadosPresos(consultasLimite: Int): List<OperacaoPresa>
-    fun resetarParaPendente(ids: List<Long>)
+    fun buscarEnviadosPresos(consultasLimite: Int, maximo: Int): List<OperacaoPresa>
     fun marcarRegistrado(id: Long, iud: String): Boolean
     fun marcarRecusado(id: Long, errosJson: String): Boolean
     fun buscarPorReferencia(referenciaExterna: String): OperacaoLinha?
-    fun buscarLotesEnviados(idadeMin: Instant): List<LoteEnviado>
+    fun buscarLotesEnviados(idadeMin: Instant, limite: Int): List<LoteEnviado>
     fun reprocessar(id: Long): Boolean
 }

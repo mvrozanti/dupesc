@@ -76,14 +76,16 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
             .update()
     }
 
-    override fun buscarEnviadosPresos(consultasLimite: Int): List<OperacaoPresa> =
+    override fun buscarEnviadosPresos(consultasLimite: Int, maximo: Int): List<OperacaoPresa> =
         jdbc.sql(
             """
             SELECT id, referencia_externa, registradora, lote_id, consultas
             FROM operacao WHERE estado = 'ENVIADO' AND consultas >= :limite
+            ORDER BY id LIMIT :maximo
             """.trimIndent(),
         )
             .param("limite", consultasLimite)
+            .param("maximo", maximo)
             .query { rs, _ -> OperacaoPresa(
                 id = rs.getLong("id"),
                 referenciaExterna = rs.getString("referencia_externa"),
@@ -104,14 +106,6 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
             .param("erros", erro)
             .param("ids", ids)
             .param("estados", estadosSql(EventoOperacao.FalhaPermanente("")))
-            .update()
-    }
-
-    override fun resetarParaPendente(ids: List<Long>) {
-        jdbc.sql(
-            "UPDATE operacao SET estado = 'PENDENTE', lote_id = NULL, atualizado_em = now() WHERE id IN (:ids) AND estado = 'ENVIADO'",
-        )
-            .param("ids", ids)
             .update()
     }
 
@@ -159,16 +153,19 @@ class OperacaoRepositoryJdbc(private val jdbc: JdbcClient) : OperacaoRepository 
             .optional()
             .orElse(null)
 
-    override fun buscarLotesEnviados(idadeMin: Instant): List<LoteEnviado> =
+    override fun buscarLotesEnviados(idadeMin: Instant, limite: Int): List<LoteEnviado> =
         jdbc.sql(
             """
             SELECT registradora, lote_id, array_agg(id ORDER BY id) AS ids
             FROM operacao
             WHERE estado = 'ENVIADO' AND lote_id IS NOT NULL AND enviado_em < :idadeMin
             GROUP BY registradora, lote_id
+            ORDER BY min(enviado_em)
+            LIMIT :limite
             """.trimIndent(),
         )
             .param("idadeMin", OffsetDateTime.ofInstant(idadeMin, ZoneOffset.UTC))
+            .param("limite", limite)
             .query { rs, _ ->
                 val ids = (rs.getArray("ids").array as Array<*>).map { (it as Number).toLong() }
                 LoteEnviado(rs.getString("registradora"), rs.getString("lote_id"), ids)

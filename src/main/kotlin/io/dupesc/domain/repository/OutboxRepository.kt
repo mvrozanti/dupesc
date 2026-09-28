@@ -1,8 +1,9 @@
 package io.dupesc.domain.repository
 
 import io.dupesc.domain.model.OperacaoLegado
+import java.time.Instant
 
-data class Claim(val operacaoId: Long, val attemptCount: Int)
+data class Claim(val operacaoId: Long, val attemptCount: Int, val claimedUntil: Instant)
 
 data class ItemComando(
     val operacaoId: Long,
@@ -19,7 +20,6 @@ interface OutboxRepository {
     fun marcarProcessado(operacaoIds: List<Long>)
     fun falhaRetryavel(operacaoIds: List<Long>, atrasoMs: Long, erro: String)
     fun marcarDlq(operacaoIds: List<Long>)
-    fun reabrir(operacaoIds: List<Long>)
     fun repararLeasesVencidos(): List<Long>
     fun promoverEnviadosComLote(): List<Long>
     fun idadePendenteMaisAntigoMs(): Long?
