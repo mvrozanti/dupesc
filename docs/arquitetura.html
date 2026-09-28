@@ -203,7 +203,8 @@ flowchart LR
     intencao[("intenção")]
     operacao[("operação&lt;br/&gt;PENDENTE → REGISTRADO")]
     outbox[("outbox")]
-    titulo[("título&lt;br/&gt;IUD ↔ interno")]
+    titulo[("título&lt;br/&gt;IUD por registradora&lt;br/&gt;um só ativo")]
+    ratelimit[("rate_limit&lt;br/&gt;token bucket global")]
     eventos[("eventos_recebidos")]
     dlq[("dlq&lt;br/&gt;OUTBOX · WEBHOOK · LEITOR")]
   end
@@ -242,7 +243,10 @@ flowchart LR
   classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
   classDef err fill:#ffebee,stroke:#c62828,stroke-width:2px
   class legado,cerc extc
-  class intencao,operacao,outbox,titulo,eventos db
+  worker --&gt;|"pede permissão"| ratelimit
+  reconcil --&gt;|"pede permissão"| ratelimit
+
+  class intencao,operacao,outbox,titulo,eventos,ratelimit db
   class leitor,api,worker,reconcil,webhook app
   class dlq err
 </pre>

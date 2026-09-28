@@ -93,6 +93,31 @@ vieram de testes, nenhum de leitura de código.
 
 Cobertura nova: `HardeningSegundoRoundTest` (8 testes). Suíte: 28 testes.
 
+## Quarto round — regressões dos próprios consertos
+
+Código inalterado desde o round 3; a rodada saiu inteira de leitura e de
+raciocínio sobre interleavings. Nenhum destes tinha teste.
+
+| # | Crítica | Melhoria | Status |
+|---|---|---|---|
+| 29 | Lote em `ERRO` era reenviado cegamente, com desfecho por item desconhecido — tratamento oposto ao de `abandonarPresos`. E como o reenvio gera `lote_id` novo, o webhook do lote antigo chegava divergente e era descartado pelo guard de integridade: registradora com dois títulos, nós com um, evidência no lixo | `ERRO` de lote vai para `INDETERMINADO` como qualquer desfecho desconhecido; `resetar`/`reabrir`/`resetarParaPendente` removidos | corrigido |
+| 30 | Bisect sem prazo: 200 itens todos ruins dão até 399 chamadas × 10s de `readTimeout` ≈ 66 min contra lease de 10 min. Lease vencia no meio, outro pod reenviava, e o bisect original carimbava `lote_id` em cima da operação alheia — dupla escrituração não reconciliável de volta | `Claim` carrega `claimed_until`; antes de cada chamada o bisect confere o relógio contra o prazo menos 25% do lease e devolve o resto à fila | corrigido |
+| 31 | Bisect disparava em erro local (registradora fora do registry), gerando 2n−1 recursões inúteis que queimavam o teto de taxa antes de mandar tudo para a DLQ | `RegistradoraException.rejeicaoDeConteudo`, marcada só em 400/422; bisect exige essa origem | corrigido |
+| 32 | Corrida no índice `idx_titulo_ativo` lança `DuplicateKeyException`, que não é `RegistradoraException` e escapava o único `catch` do laço — cancelava a passada inteira, inclusive `abandonarPresos` | `runCatching` por item na aplicação de resultados | corrigido |
+| 33 | `idadePendenteMaisAntigoMs` virou `ORDER BY coalesce(...) LIMIT 1` no round 3, sem índice para a expressão: sort do conjunto `PENDENTE` inteiro a cada tick do alerta e a cada scrape do Prometheus, em todos os pods | índice de expressão parcial (V9) | corrigido |
+| 34 | Negativa do token bucket fazia `return@forEach`: depois de indisponibilidade, milhares de UPDATEs serializados na mesma linha por ciclo, sem trabalho útil | `break` na primeira negativa | corrigido |
+| 35 | `naoEsgota` (429/423) reagendava com backoff exponencial sobre `attempt_count` já incrementado pelo claim — espera de janela virava espiral até o cap de 600s | `atrasoEspera()`, atraso fixo curto com jitter | corrigido |
+| 36 | `CredenciaisGuard` aplicava piso de 16 caracteres e lista de proibidos ao `client-id`, que não é segredo e é emitido pela registradora: app em crash loop com credencial legítima | `client-id` fora da checagem; `dupe.credenciais-impostas` como dispensa explícita | corrigido |
+| 37 | Fallback do `evictConnection` só logava e o `close()` seguinte devolvia ao pool a conexão que ainda segurava o lock — o bug do round 3 voltava em silêncio se o DataSource viesse embrulhado | `pg_terminate_backend(pg_backend_pid())` quando o evict falha | corrigido |
+| 38 | `RateLimiterDb` usava `now()`, timestamp da transação: qualquer transação envolvendo o worker congelaria a recarga e travaria o envio | `clock_timestamp()` | corrigido |
+| 39 | `buscarLotesEnviados` e `buscarEnviadosPresos` sem `LIMIT`; `abandonarPresos` numa transação única | `lotes-por-ciclo` (500) nas duas varreduras; DLQ em fatias de 100 | corrigido |
+| 40 | Pool do Hikari no default (10) sem detecção de vazamento, com duas conexões ociosas presas pelos advisory locks | `maximum-pool-size` 20 e `leak-detection-threshold` explícitos | corrigido |
+| 41 | `docs/faq.md` novo contradizia o `docs/faq-arquitetura.md` e o código em sete pontos — "nada interno pode derrubar", "B3 é o mesmo que trocar o IP de um endpoint" — e era o link do topo do README | perguntas úteis absorvidas no FAQ honesto com limite honesto; `docs/faq.md` removido | corrigido |
+
+Cobertura nova: `HardeningQuartoRoundTest` (8 testes), **cada um rodado contra o
+código anterior para confirmar que falhava** — 6 de 8 falharam, 2 são guardas de
+regressão. Suíte: 36 testes.
+
 ## Dívida registrada (não implementada agora)
 
 - Poison-pill: bisect de lote com item ruim (reenvia o lote todo hoje).
