@@ -11,11 +11,13 @@ class CredenciaisGuard(properties: DupeProperties, environment: Environment) {
         val permitidos = setOf("test", "demo", "mock-cerc", "mock-legado")
         if (perfis.none { it in permitidos }) {
             val suspeitas = listOf(
+                "dupe.cerc.client-id" to properties.cerc.clientId,
                 "dupe.cerc.client-secret" to properties.cerc.clientSecret,
                 "dupe.cerc.webhook-secret" to properties.cerc.webhookSecret,
                 "dupe.legado.api-key" to properties.legado.apiKey,
                 "dupe.admin.api-key" to properties.admin.apiKey,
-            ).filter { (_, valor) -> valor.startsWith("poc-") }
+                "spring.datasource.password" to environment.getProperty("spring.datasource.password").orEmpty(),
+            ).filter { (_, valor) -> fraca(valor) }
 
             if (suspeitas.isNotEmpty()) {
                 throw IllegalStateException(
@@ -26,5 +28,13 @@ class CredenciaisGuard(properties: DupeProperties, environment: Environment) {
                 throw IllegalStateException("DUPE_POD_ID nao definido em perfil nao-dev")
             }
         }
+    }
+
+    private fun fraca(valor: String): Boolean =
+        valor.isBlank() || valor.length < TAMANHO_MINIMO || PLACEHOLDERS.any { valor.lowercase().startsWith(it) }
+
+    companion object {
+        private const val TAMANHO_MINIMO = 16
+        private val PLACEHOLDERS = listOf("poc-", "dupesc", "changeme", "secret", "password", "test", "admin")
     }
 }
