@@ -93,7 +93,7 @@ const K = {
       end
       subgraph aws["AWS"]
         alb("ALB · mTLS")
-        rds[("Postgres 16 · multi-AZ<br/>outbox = fila")]
+        rds[("Postgres 16 · multi-AZ<br/>outbox é a fila")]
         sm("Secrets Manager")
       end
       legado -->|"push · novas"| pod
@@ -169,7 +169,7 @@ const K = {
   estados: {
     t: "Estados da duplicata", cap: "A vida de uma duplicata, com a nossa parte dentro da caixa.",
     m: `flowchart TD
-      ingress[/"nova · push<br/>backlog · pull"/]
+      ingress(["nova · push<br/>backlog · pull"])
       cerc{{"CERC<br/>processa · gera IUD"}}
       subgraph nos["dupesc — o que é nosso"]
         P("PENDENTE")
@@ -204,19 +204,19 @@ const K = {
     t: "Pontos de entrada", cap: "Quem chama, qual porta, qual garantia cada uma entrega.",
     m: `flowchart TD
       inicio{"quem inicia?"}
-      inicio -->|"novas duplicatas"| push[/"POST /api/legado/operacoes"/]
+      inicio -->|"novas duplicatas"| push(["POST /api/legado/operacoes"])
       push --> g1(("não perde ·<br/>não duplica"))
-      inicio -->|"migração"| leitor[/"LeitorJob · pull"/]
+      inicio -->|"migração"| leitor(["LeitorJob · pull"])
       leitor --> g1
-      inicio -->|"registradora"| wh[/"POST /webhook/{reg}"/]
+      inicio -->|"registradora"| wh(["POST /webhook/{reg}"])
       wh --> hmac{"HMAC válido?"}
       hmac -->|"não"| g2(("401"))
       hmac -->|"sim"| dup{"event_id visto?"}
       dup -->|"sim"| g3(("idempotente"))
       dup -->|"não"| g4(("exatamente-uma-vez"))
-      inicio -->|"operador"| mon[/"GET /api/operacoes"/]:::plan
+      inicio -->|"operador"| mon(["GET /api/operacoes"]):::plan
       mon --> g5(("read-only")):::plan
-      inicio -->|"ops"| met[/"métricas · dlq"/]
+      inicio -->|"ops"| met(["métricas · dlq"])
       met --> g6(("visibilidade"))
       classDef plan fill:#fafafa,stroke:#9e9e9e,stroke-width:1.5px,stroke-dasharray:5 4
       classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
