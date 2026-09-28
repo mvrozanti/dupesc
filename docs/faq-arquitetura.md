@@ -587,6 +587,9 @@ para fazer com slideware.
 
 ## 11. Caso de negócio FIDC
 
+**Código, não arquitetura.** Tudo aqui são comandos novos que entram na mesma
+`RegistradoraPort` e na mesma fila. Nada desta seção muda o desenho.
+
 ### 11.1 "O FIDC precisa do lastro, não só da escrituração. Isso atende?" 🟡
 
 O marco de janeiro é só escrituração/registro — o título registrado vira lastro
@@ -622,6 +625,12 @@ decisão é consciente: o marco de janeiro é o registro.
 ---
 
 ## 12. Falhas de infraestrutura profundas
+
+**Quase tudo é observabilidade/operação, não arquitetura.** O desenho já trata
+clock skew (`now()` do banco) e split-brain (advisory lock + SKIP LOCKED). O que
+falta são knobs (timeout do pool, semaphore contra banco lento, flag de
+backpressure) e alertas (staleness do Prometheus, idade da fila em vez de
+healthcheck).
 
 ### 12.1 "Registradora fora do ar por dias, não só fora da janela?" 🟡
 
@@ -676,10 +685,15 @@ comando, agravada pela ordem.
 
 ### 13.2 "Dois comandos diferentes para o mesmo id — qual vence?" 🔴
 
-Hoje nem existe o segundo comando: `operacao_legado_id UNIQUE` descarta o reenvio.
-Quando houver registrar+cancelar+liquidar, a chave de dedup vira (id + tipo de
-comando) e a ordem de aplicação vira regra de negócio (último vence? terminal
-bloqueia?). Não decidido.
+**Requisito do MVP, não decidido ainda como.** A ordem é exigência; o modelo ainda
+não tem. O que falta, concretamente: (1) comando vira entidade — a dedup sai de
+`operacao_legado_id UNIQUE` para `UNIQUE(id, tipo_comando)`, porque registrar,
+cancelar e liquidar são comandos distintos do mesmo título, não reenvio; (2)
+sequência monotônica por duplicata, com o worker processando a mesma duplicata em
+ordem (o SKIP LOCKED de hoje não ordena — dois comandos da mesma duplicata podem
+sair em pods diferentes); (3) regra de negócio do que bloqueia o quê (cancelar de
+uma REGISTRADO ok; terminal bloqueia?). É mudança local no domínio + no claim do
+worker, não um serviço novo.
 
 ### 13.3 "event_id reenviado com payload divergente — qual prevalece?" 🟡
 
@@ -691,6 +705,10 @@ contrato é id único por evento, e não vimos o contrário.
 ---
 
 ## 14. Segurança residual
+
+**Código/config, não arquitetura.** SQL injection já é impossível (JdbcClient
+parametrizado); injeção no payload é só dado validado; segredo vazado é rotação +
+nonce no HMAC. Nada estrutural.
 
 ### 14.1 "Segredo do webhook vazou — qual o dano e a rotação?" 🟡
 
