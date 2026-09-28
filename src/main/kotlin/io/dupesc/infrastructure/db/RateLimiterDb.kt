@@ -11,25 +11,23 @@ class RateLimiterDb(
 ) {
 
     fun adquirirPermissao(registradora: String): Boolean {
-        val rps = properties.cerc.rateLimitRps
-        val contador = jdbc.sql(
+        val nome = registradora.uppercase()
+        val rps = properties.cerc.rateLimitRps.toDouble()
+        jdbc.sql("INSERT INTO rate_limit (registradora, tokens) VALUES (:r, :rps) ON CONFLICT (registradora) DO NOTHING")
+            .param("r", nome)
+            .param("rps", rps)
+            .update()
+        return jdbc.sql(
             """
-            INSERT INTO rate_limit (registradora, janela_inicio, contador) VALUES (:r, now(), 1)
-            ON CONFLICT (registradora) DO UPDATE
-            SET contador = CASE
-                    WHEN rate_limit.janela_inicio < now() - interval '1 second' THEN 1
-                    ELSE rate_limit.contador + 1
-                END,
-                janela_inicio = CASE
-                    WHEN rate_limit.janela_inicio < now() - interval '1 second' THEN now()
-                    ELSE rate_limit.janela_inicio
-                END
-            RETURNING contador
+            UPDATE rate_limit SET
+                tokens = LEAST(:rps, tokens + extract(epoch FROM (now() - atualizado_em)) * :rps) - 1,
+                atualizado_em = now()
+            WHERE registradora = :r
+              AND LEAST(:rps, tokens + extract(epoch FROM (now() - atualizado_em)) * :rps) >= 1
             """.trimIndent(),
         )
-            .param("r", registradora.uppercase())
-            .query(Int::class.java)
-            .single()!!
-        return contador <= rps
+            .param("rps", rps)
+            .param("r", nome)
+            .update() == 1
     }
 }

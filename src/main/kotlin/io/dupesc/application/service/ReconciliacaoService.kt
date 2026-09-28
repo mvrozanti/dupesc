@@ -14,6 +14,7 @@ import io.dupesc.domain.repository.ResultadoTitulo
 import io.dupesc.domain.repository.TituloRepository
 import io.dupesc.infrastructure.configuration.DupeProperties
 import io.dupesc.infrastructure.db.AdvisoryLockManager
+import io.dupesc.infrastructure.db.RateLimiterDb
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
@@ -26,6 +27,7 @@ class ReconciliacaoService(
     private val tituloRepository: TituloRepository,
     private val dlqRepository: DlqRepository,
     private val registry: RegistradoraRegistry,
+    private val rateLimiterDb: RateLimiterDb,
     private val advisoryLockManager: AdvisoryLockManager,
     private val properties: DupeProperties,
     private val objectMapper: ObjectMapper,
@@ -52,6 +54,10 @@ class ReconciliacaoService(
         val lotes = operacaoRepository.buscarLotesEnviados(idadeMin)
         var resolvidos = 0
         lotes.forEach { lote ->
+            if (!rateLimiterDb.adquirirPermissao(lote.registradora)) {
+                log.info("teto de taxa atingido — lote {} fica para o proximo ciclo", lote.loteId)
+                return@forEach
+            }
             try {
                 val resultado = registry.port(lote.registradora).consultar(EnvioHandle(lote.loteId))
                 when (resultado.statusLote) {
