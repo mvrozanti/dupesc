@@ -275,19 +275,19 @@ flowchart TD
     INDETERMINADO("INDETERMINADO&lt;br/&gt;desfecho desconhecido&lt;br/&gt;conferência manual")
   end
 
-  ingress ----&gt; PENDENTE : "grava intenção+operação+outbox"gt;|"grava intenção+operação+outbox"| PENDENTE
-  PENDENTE ----&gt; EM_ENVIO : "claim"gt;|"claim"| EM_ENVIO
-  EM_ENVIO ----&gt; ENVIADO : "POST lote ok"gt;|"POST lote ok"| ENVIADO
-  EM_ENVIO ----&gt; PENDENTE : "retry · lease expirado"gt;|"retry · lease expirado"| PENDENTE
-  ENVIADO ----&gt; cerc : "lote"gt;|"lote"| cerc
-  cerc ----&gt; REGISTRADO : "webhook · lote-finalizado"gt;|"webhook · lote-finalizado"| REGISTRADO
-  cerc ----&gt; RECUSADO : "rejeição"gt;|"rejeição"| RECUSADO
-  ENVIADO ----&gt; REGISTRADO : "reconciliação · consulta"gt;|"reconciliação · consulta"| REGISTRADO
-  ENVIADO ----&gt; RECUSADO : "rejeição de negócio"gt;|"rejeição de negócio"| RECUSADO
-  ENVIADO ----&gt; DLQ : "erro persistente"gt;|"erro persistente"| DLQ
-  EM_ENVIO ----&gt; DLQ : "tentativas esgotadas"gt;|"tentativas esgotadas"| DLQ
-  ENVIADO ----&gt; INDETERMINADO : "limite de consultas sem desfecho"gt;|"limite de consultas sem desfecho"| INDETERMINADO
-  INDETERMINADO ----&gt; DLQ : "entra na revisão, sem reenvio automático"gt;|"entra na revisão, sem reenvio automático"| DLQ
+  ingress --&gt;|"grava intenção+operação+outbox"| PENDENTE
+  PENDENTE --&gt;|"claim"| EM_ENVIO
+  EM_ENVIO --&gt;|"POST lote ok"| ENVIADO
+  EM_ENVIO --&gt;|"retry · lease expirado"| PENDENTE
+  ENVIADO --&gt;|"lote"| cerc
+  cerc --&gt;|"webhook · lote-finalizado"| REGISTRADO
+  cerc --&gt;|"rejeição"| RECUSADO
+  ENVIADO --&gt;|"reconciliação · consulta"| REGISTRADO
+  ENVIADO --&gt;|"rejeição de negócio"| RECUSADO
+  ENVIADO --&gt;|"erro persistente"| DLQ
+  EM_ENVIO --&gt;|"tentativas esgotadas"| DLQ
+  ENVIADO --&gt;|"limite de consultas sem desfecho"| INDETERMINADO
+  INDETERMINADO --&gt;|"entra na revisão, sem reenvio automático"| DLQ
 
   classDef extc fill:#ffe0b2,stroke:#e65100,stroke-width:2px
   classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
