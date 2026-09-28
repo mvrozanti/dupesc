@@ -1,0 +1,352 @@
+<title>Dez coleções — dupesc</title>
+<style>
+  :root {
+    --frame-bg: #10151c;
+    --frame-ink: #dbe4ee;
+    --frame-muted: #7f8da0;
+    --frame-accent: #66bb6a;
+    --frame-line: #26303c;
+    --spec-bg: #f4f6f8;
+    --spec-ink: #17222d;
+    --spec-muted: #5b6b78;
+    --spec-line: #d6dfe6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 400 15px/1.5 "IBM Plex Sans", system-ui, sans-serif; background: var(--frame-bg); color: var(--frame-ink); }
+  .deck { display: grid; grid-template-columns: 300px 1fr; min-height: 100vh; }
+  .rail { padding: 24px 20px; border-right: 1px solid var(--frame-line); position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .rail h1 { font: 600 18px/1.25 "IBM Plex Mono", monospace; margin: 0 0 4px; letter-spacing: -.01em; }
+  .rail .axis { color: var(--frame-muted); font-size: 13px; margin: 0 0 18px; }
+  .dir { display: block; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 10px 12px; cursor: pointer; color: var(--frame-ink); font: inherit; margin-bottom: 6px; }
+  .dir:hover { border-color: var(--frame-line); }
+  .dir.on { background: #16212c; border-color: var(--frame-accent); }
+  .dir .n { font: 500 11px "IBM Plex Mono", monospace; color: var(--frame-muted); display: block; }
+  .dir .t { font-weight: 600; font-size: 14px; }
+  .dir .s { font-size: 12px; color: var(--frame-muted); }
+
+  .stage { padding: 28px 32px 48px; overflow-y: auto; }
+  .stage .spec-head { font: 500 12px "IBM Plex Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--frame-muted); margin-bottom: 10px; }
+  .spec { background: var(--spec-bg); color: var(--spec-ink); border-radius: 12px; padding: 26px 24px; max-width: 1080px; }
+  .spec .intro { color: var(--spec-muted); max-width: 640px; margin: 0 0 20px; }
+  .block { margin-top: 26px; }
+  .block h3 { font: 600 15px "IBM Plex Mono", monospace; margin: 0 0 4px; letter-spacing: .02em; }
+  .block .cap { color: var(--spec-muted); font-size: 13px; margin: 0 0 10px; }
+  .block .panel { background: #fff; border: 1px solid var(--spec-line); border-radius: 10px; padding: 16px; overflow-x: auto; }
+  .block .panel svg { max-width: 100%; height: auto; }
+
+  .ledger { margin-top: 30px; border-top: 1px solid var(--spec-line); padding-top: 18px; font-size: 13px; }
+  .ledger table { width: 100%; border-collapse: collapse; }
+  .ledger td { padding: 6px 10px; border-bottom: 1px solid var(--spec-line); vertical-align: top; }
+  .ledger td:first-child { font: 500 11px "IBM Plex Mono", monospace; color: var(--spec-muted); width: 90px; text-transform: uppercase; letter-spacing: .06em; }
+  .verdict { margin-top: 16px; padding: 14px 16px; border-radius: 10px; font-size: 14px; }
+  .verdict.pick { background: #e8f5e9; border: 1px solid #a5d6a7; }
+  .verdict.against { background: #fafafa; border: 1px solid var(--spec-line); }
+  .verdict.mixed { background: #fff8e1; border: 1px solid #ffe082; }
+  .verdict b { font: 600 12px "IBM Plex Mono", monospace; letter-spacing: .06em; text-transform: uppercase; }
+
+  @media (max-width: 820px) { .deck { grid-template-columns: 1fr; } .rail { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--frame-line); } }
+</style>
+
+<div class="deck">
+  <aside class="rail">
+    <h1>dez coleções</h1>
+    <p class="axis">o que organiza o conjunto de diagramas do dupesc — a jornada, as camadas, as garantias, o banco, ou o modo de falha?</p>
+    <div id="switcher"></div>
+  </aside>
+  <main class="stage">
+    <div class="spec-head">espécime — coleção selecionada</div>
+    <div class="spec" id="spec"></div>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.4.0/mermaid.min.js"></script>
+<script>
+mermaid.initialize({ startOnLoad: false, theme: "neutral", securityLevel: "strict" });
+
+const K = {
+  sequencia: {
+    t: "Sequência", cap: "Ida e volta de uma operação, do ingresso ao registro.",
+    m: `sequenceDiagram
+      participant L as Legado
+      participant PG as Postgres
+      participant W as Worker
+      participant C as CERC
+      participant H as Webhook
+      L->>PG: leitor/push: tx(intencao+operacao+outbox)
+      W->>PG: SKIP LOCKED reivindica (EM_ENVIO)
+      W->>C: POST lote
+      W->>PG: lote_id + ENVIADO
+      C->>H: lote-finalizado (HMAC)
+      H->>PG: tx(dedup + REGISTRADO + titulo)
+      H-->>C: 200
+      Note over PG,H: reconcilia ENVIADO > 30min se o pod morrer`
+  },
+  infra: {
+    t: "Infraestrutura", cap: "Um binário em N pods, um Postgres (fila incluída), ALB com mTLS para webhooks.",
+    m: `flowchart LR
+      subgraph ext["EXTERNO"]
+        legado{{"sistema legado"}}
+        cerc{{"CERC"}}
+      end
+      subgraph nos["NOSSO"]
+        pod("dupesc — N pods<br/>jobs + API")
+      end
+      subgraph aws["AWS"]
+        alb("ALB · mTLS")
+        rds[("Postgres 16 · multi-AZ<br/>outbox = fila")]
+        sm("Secrets Manager")
+      end
+      legado -->|"push · novas"| pod
+      pod -->|"pull · migração"| legado
+      pod ==>|"1 tx"| rds
+      pod -->|"POST lote"| cerc
+      cerc -->|"webhook"| alb
+      alb -->|"X-Signature"| pod
+      sm -->|"credenciais"| pod
+      classDef extc fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+      classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+      classDef inf fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+      classDef db fill:#e8eaf6,stroke:#283593,stroke-width:2px
+      class legado,cerc extc
+      class pod app
+      class alb,sm inf
+      class rds db`
+  },
+  dados: {
+    t: "Modelo de dados", cap: "Oito tabelas. A fila é a própria tabela outbox; não há broker.",
+    m: `flowchart LR
+      intencao[("intencao<br/>fonte")] --> operacao[("operacao<br/>estado por registradora")]
+      operacao --> outbox[("outbox<br/>fila transacional")]
+      operacao --> titulo[("titulo<br/>IUD · um ativo")]
+      eventos[("eventos_recebidos<br/>dedup webhook")] --> operacao
+      checkpoint[("checkpoint<br/>cursor do legado")]
+      dlq[("dlq<br/>OUTBOX·WEBHOOK·LEITOR·INGESTAO")]
+      rate[("rate_limit<br/>token bucket")]
+      outbox --> dlq
+      classDef db fill:#e8eaf6,stroke:#283593,stroke-width:2px
+      class intencao,operacao,outbox,titulo,eventos,checkpoint,dlq,rate db`
+  },
+  fluxo: {
+    t: "Fluxo dos dados", cap: "Duas ingestões deságuam na mesma transação; a volta é deduplicada; o reconciliador repara.",
+    m: `flowchart LR
+      subgraph b["banco único"]
+        intencao[("intenção")]
+        operacao[("operação<br/>PENDENTE → REGISTRADO")]
+        outbox[("outbox")]
+        titulo[("título")]
+        eventos[("eventos")]
+        dlq[("dlq")]
+      end
+      subgraph p["processo"]
+        leitor("LeitorJob")
+        api("POST /api/legado")
+        worker("OutboxWorker")
+        reconcil("ReconciliadorJob")
+        webhook("WebhookController")
+      end
+      cerc{{"CERC"}}
+      api ==>|"1 tx"| outbox
+      leitor ==>|"1 tx"| outbox
+      outbox -->|"SKIP LOCKED"| worker
+      worker -->|"POST lote"| cerc
+      worker ==>|"ENVIADO"| operacao
+      cerc -->|"webhook"| webhook
+      webhook ==>|"dedup"| eventos
+      webhook ==>|"REGISTRADO + IUD"| operacao
+      webhook ==>|"título"| titulo
+      webhook ==>|"erro"| dlq
+      reconcil -->|"ENVIADO > 30min"| cerc
+      reconcil ==>|"resolvido"| operacao
+      classDef db fill:#e8eaf6,stroke:#283593,stroke-width:2px
+      classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+      classDef ext fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+      classDef err fill:#ffebee,stroke:#c62828,stroke-width:2px
+      class intencao,operacao,outbox,titulo,eventos db
+      class leitor,api,worker,reconcil,webhook app
+      class cerc ext
+      class dlq err`
+  },
+  estados: {
+    t: "Estados da duplicata", cap: "A vida de uma duplicata, com a nossa parte dentro da caixa.",
+    m: `flowchart TD
+      ingress[/"nova · push<br/>backlog · pull"/]
+      cerc{{"CERC<br/>processa · gera IUD"}}
+      subgraph nos["dupesc — o que é nosso"]
+        P("PENDENTE")
+        E("EM_ENVIO")
+        V("ENVIADO")
+        R("REGISTRADO")
+        X("RECUSADO")
+        D("DLQ")
+      end
+      ingress --> P
+      P --> E --> V
+      E --> P : retry
+      V --> cerc
+      cerc --> R : webhook
+      cerc --> X : rejeição
+      V --> R : reconciliação
+      V --> X : negócio
+      E --> D : esgotado
+      V --> D : preso
+      classDef ext fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+      classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+      classDef ok fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+      classDef bad fill:#ffebee,stroke:#c62828,stroke-width:2px
+      classDef warn fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+      class cerc ext
+      class P,E,V app
+      class R ok
+      class X warn
+      class D bad`
+  },
+  entradas: {
+    t: "Pontos de entrada", cap: "Quem chama, qual porta, qual garantia cada uma entrega.",
+    m: `flowchart TD
+      inicio{"quem inicia?"}
+      inicio -->|"novas duplicatas"| push[/"POST /api/legado/operacoes"/]
+      push --> g1(("não perde ·<br/>não duplica"))
+      inicio -->|"migração"| leitor[/"LeitorJob · pull"/]
+      leitor --> g1
+      inicio -->|"registradora"| wh[/"POST /webhook/{reg}"/]
+      wh --> hmac{"HMAC válido?"}
+      hmac -->|"não"| g2(("401"))
+      hmac -->|"sim"| dup{"event_id visto?"}
+      dup -->|"sim"| g3(("idempotente"))
+      dup -->|"não"| g4(("exatamente-uma-vez"))
+      inicio -->|"operador"| mon[/"GET /api/operacoes"/]:::plan
+      mon --> g5(("read-only")):::plan
+      inicio -->|"ops"| met[/"métricas · dlq"/]
+      met --> g6(("visibilidade"))
+      classDef plan fill:#fafafa,stroke:#9e9e9e,stroke-width:1.5px,stroke-dasharray:5 4
+      classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+      classDef dec fill:#fff,stroke:#455a64,stroke-width:2px
+      classDef gar fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+      class push,leitor,wh,met app
+      class inicio,hmac,dup dec
+      class g1,g2,g3,g4,g5,g6 gar`
+  },
+  garantias: {
+    t: "Garantias", cap: "O que este desenho promete, e o mecanismo por trás de cada promessa.",
+    m: `flowchart TD
+      n[("não perde")] --> m1["grava antes de agir<br/>outbox transacional"]
+      d[("não duplica")] --> m2["unique constraint<br/>+ guarda de estado"]
+      e[("escala horizontal")] --> m3["SKIP LOCKED<br/>sem coordenador"]
+      r[("recompõe sozinho")] --> m4["reconciliador<br/>consulta ENVIADO > 30min"]
+      classDef gar fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+      classDef m fill:#fff,stroke:#455a64,stroke-width:2px
+      class n,d,e,r gar
+      class m1,m2,m3,m4 m`
+  },
+};
+
+const D = [
+  { id:"jornada", name:"A jornada", sub:"a duplicata contada em ordem de acontecimento",
+    order:["sequencia","fluxo","estados","entradas"], layout:"linear",
+    intro:"Uma narrativa linear: o que acontece com uma duplicata do ingresso ao registro. Cada diagrama é um capítulo na ordem do tempo.",
+    ledger:{touches:"nenhum arquivo — é só a ordem de leitura", adds:"~0 linhas; é o atual reordenado", removes:"nada", gives:"nenhuma visão de arquitetura estática; quem quer a camada precisa deduzi-la"},
+    verdict:{pos:"mixed", why:"Fácil de apresentar, mas o público técnico procura a camada e não acha de primeira.", run:null} },
+  { id:"camadas", name:"As camadas", sub:"infra → dados → domínio → entradas, numerado",
+    order:["infra","dados","fluxo","estados","entradas"], layout:"linear",
+    intro:"O mais literal: quatro camadas em ordem de concretude. Ideal para quem vai implementar, não para quem quer a tese em dez segundos.",
+    ledger:{touches:"nenhum", adds:"~0 linhas", removes:"nada", gives:"a história do usuário — é estrutura, não narrativa"},
+    verdict:{pos:"mixed", why:"Serve de índice técnico, mas não abre com a resposta que o stakeholder quer.", run:"Garantias primeiro"} },
+  { id:"garantias", name:"Garantias primeiro", sub:"abre com a tese; diagramas são a prova",
+    order:["garantias","fluxo","entradas","estados","infra"], layout:"linear",
+    intro:"Abre com as três promessas (não perde, não duplica, escala) e usa cada diagrama como evidência. É a ordem de quem defende a solução numa reunião.",
+    ledger:{touches:"nenhum", adds:"~0 linhas", removes:"nada", gives:"a camada de infra fica por último — quem entra procurando o desenho de produção espera"},
+    verdict:{pos:"pick", why:"É a coleção certa para apresentar: o ponto na frente, a prova atrás. E é a que melhor sobrevive a pergunta de corte.", run:null} },
+  { id:"mapa", name:"O mapa", sub:"um só diagrama que se abre em zoom",
+    order:["infra","fluxo","estados","entradas"], layout:"zoom",
+    intro:"Um mapa contínuo: começa no macro (infra) e cada bloco se expande no detalhe. Uma lâmina que não acaba.",
+    ledger:{touches:"docs/arquitetura.html — reestruturação", adds:"~80 linhas de interação de zoom", removes:"as seções separadas viram um contínuo", gives:"imprimibilidade — o zoom não traduz para papel/slide estático"},
+    verdict:{pos:"mixed", why:"Bonito e denso, mas perde o 'slide por slide' que uma apresentação presencial precisa.", run:"Garantias primeiro"} },
+  { id:"falha", name:"Modos de falha", sub:"organizado pelo que dá errado",
+    order:["fluxo","estados","entradas","garantias"], layout:"linear",
+    intro:"Organiza pelo caminho infeliz: retry, lease vencido, reconciliação, DLQ, RECUSADO. O happy path é o pano de fundo, não o foco.",
+    ledger:{touches:"nenhum; é a mesma base com captions reescritos", adds:"captions de falha por bloco", removes:"nada", gives:"a visão de sucesso fica implícita — risco de ler como 'sistema frágil'"},
+    verdict:{pos:"mixed", why:"Útil para revisão de operação, mas como primeira impressão passa a mensagem errada.", run:"Garantias primeiro"} },
+  { id:"pergunta", name:"Pergunta-resposta", sub:"cada diagrama responde uma objeção",
+    order:["infra","fluxo","garantias","entradas"], layout:"qa",
+    intro:"Cada bloco vem emparelhado com a objeção que mata: 'como escala?', 'e a consistência?', 'só tem CERC?'. É o FAQ ilustrado.",
+    ledger:{touches:"docs/faq.md — o conteúdo entra colado aos diagramas", adds:"par de Q&A por bloco", removes:"nada", gives:"a ordem deixa de ser lógica para ser retórica — quem não tem a pergunta não acha a resposta"},
+    verdict:{pos:"mixed", why:"Fortíssima para defender sob fogo, mas fraca como leitura linear de quem acabou de chegar.", run:null} },
+  { id:"banco", name:"O banco como espinha", sub:"as oito tabelas organizam tudo",
+    order:["dados","fluxo","estados","entradas","infra"], layout:"linear",
+    intro:"Tudo é uma vista sobre as oito tabelas. A tese vira 'a fila é o estado' — e o modelo de dados é a espinha que liga os diagramas.",
+    ledger:{touches:"nenhum", adds:"~0 linhas", removes:"nada", gives:"exige que o leitor aceite o Postgres como protagonista antes de ver qualquer fluxo"},
+    verdict:{pos:"mixed", why:"A tese mais profunda, mas pressupõe interesse no dado — não é porta de entrada.", run:"Garantias primeiro"} },
+  { id:"tempo", name:"Linha do tempo de entrega", sub:"POC provado → MVP → produção",
+    order:["garantias","fluxo","infra","entradas"], layout:"linear",
+    intro:"Agrupa pelo que já está provado (POC), pelo que entra no MVP (cancelar/alterar, multi-reg) e pelo que fica para produção. Honesto sobre o que falta.",
+    ledger:{touches:"README (estado atual) entra como legenda de fase", adds:"rótulos de fase por bloco", removes:"nada", gives:"a leitura vira sobre cronograma, não sobre mecânica"},
+    verdict:{pos:"mixed", why:"É a mais honesta sobre o estado, mas confunde 'o que é' com 'quando fica pronto'.", run:null} },
+  { id:"lamina", name:"Uma lâmina", sub:"tudo comprimido num único diagrama denso",
+    order:["infra","estados"], layout:"linear",
+    intro:"Dois diagramas e nada mais: a topologia e o ciclo de vida. O pitch de elevador, numa lâmina só.",
+    ledger:{touches:"os diagramas de fluxo/dados/entradas são fundidos ou cortados", adds:"~0 linhas; é redução", removes:"fluxo, modelo de dados e pontos de entrada como blocos próprios", gives:"quase toda a mecânica — fica a forma, some a prova"},
+    verdict:{pos:"against", why:"Vende a ideia mas não sustenta pergunta técnica; a prova mora nos diagramas que ela corta.", run:"Garantias primeiro"} },
+  { id:"glossario", name:"O glossário", sub:"o símbolo é a navegação",
+    order:["infra","fluxo","estados","entradas"], layout:"linear",
+    intro:"Um índice de símbolos (cilindro = banco, losango = decisão, círculo = garantia) como espinha; cada termo leva aonde ele aparece.",
+    ledger:{touches:"a legenda deixa de ser rodapé e vira índice", adds:"índice de termos clicável", removes:"nada", gives:"duplica a legenda — e a navegação por símbolo serve a quem já entende a simbologia"},
+    verdict:{pos:"against", why:"Elegante para quem já conhece, mas é uma barreira para quem chega agora.", run:null} },
+];
+
+let seq = 0;
+async function renderBlock(container, key) {
+  const b = K[key];
+  const el = document.createElement("div"); el.className = "block";
+  const h = document.createElement("h3"); h.textContent = b.t;
+  const c = document.createElement("p"); c.className = "cap"; c.textContent = b.cap;
+  const p = document.createElement("div"); p.className = "panel";
+  el.appendChild(h); el.appendChild(c); el.appendChild(p);
+  container.appendChild(el);
+  const id = "mm" + (seq++);
+  const { svg } = await mermaid.render(id, b.m);
+  p.innerHTML = svg;
+}
+
+async function mount(i) {
+  const d = D[i];
+  const spec = document.getElementById("spec");
+  spec.innerHTML = "";
+  const intro = document.createElement("p"); intro.className = "intro"; intro.textContent = d.intro;
+  spec.appendChild(intro);
+  for (const k of d.order) await renderBlock(spec, k);
+
+  const lg = document.createElement("div"); lg.className = "ledger";
+  const L = d.ledger;
+  lg.innerHTML = `<table>
+    <tr><td>touches</td><td>${L.touches}</td></tr>
+    <tr><td>adds</td><td>${L.adds}</td></tr>
+    <tr><td>removes</td><td>${L.removes}</td></tr>
+    <tr><td>gives up</td><td>${L.gives}</td></tr>
+  </table>`;
+  spec.appendChild(lg);
+
+  const v = d.verdict;
+  const vc = document.createElement("div"); vc.className = "verdict " + v.pos;
+  vc.innerHTML = `<b>${v.pos}</b> — ${v.why}` + (v.run ? `<br>corre atrás de <b>${v.run}</b>.` : "");
+  spec.appendChild(vc);
+  window.scrollTo(0,0);
+}
+
+function buildSwitcher() {
+  const s = document.getElementById("switcher");
+  D.forEach((d, i) => {
+    const btn = document.createElement("button");
+    btn.className = "dir" + (i === 2 ? " on" : "");
+    btn.innerHTML = `<span class="n">${String(i+1).padStart(2,"0")}</span><span class="t">${d.name}</span><span class="s">${d.sub}</span>`;
+    btn.onclick = () => {
+      document.querySelectorAll(".dir").forEach(b => b.classList.remove("on"));
+      btn.classList.add("on");
+      mount(i);
+    };
+    s.appendChild(btn);
+  });
+}
+
+buildSwitcher();
+mount(2);
+</script>
