@@ -149,7 +149,11 @@ class OutboxRepositoryJdbc(
 
     override fun idadePendenteMaisAntigoMs(): Long? =
         jdbc.sql(
-            "SELECT extract(epoch FROM (now() - min(criado_em))) * 1000 FROM outbox WHERE status = 'PENDENTE'",
+            """
+            SELECT extract(epoch FROM (now() - coalesce(reenfileirado_em, criado_em))) * 1000
+            FROM outbox WHERE status = 'PENDENTE'
+            ORDER BY coalesce(reenfileirado_em, criado_em) LIMIT 1
+            """.trimIndent(),
         )
             .query { rs, _ -> rs.getDouble(1).toLong() }
             .optional()
@@ -162,7 +166,11 @@ class OutboxRepositoryJdbc(
 
     override fun reprocessar(operacaoId: Long): Boolean =
         jdbc.sql(
-            "UPDATE outbox SET status = 'PENDENTE', next_attempt_at = now(), attempt_count = 0, atualizado_em = now() WHERE operacao_id = :id AND status = 'DLQ'",
+            """
+            UPDATE outbox SET status = 'PENDENTE', next_attempt_at = now(), attempt_count = 0,
+                              reenfileirado_em = now(), atualizado_em = now()
+            WHERE operacao_id = :id AND status = 'DLQ'
+            """.trimIndent(),
         )
             .param("id", operacaoId)
             .update() == 1
