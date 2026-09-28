@@ -100,6 +100,11 @@ Testes: `./gradlew test` — Testcontainers (Postgres 16) + WireMock.
   Kafka entra **se/quando** houver fan-out real (vários consumidores independentes),
   pendurado no outbox via CDC — nunca no caminho crítico.
 
+## FAQ
+
+Objeções à arquitetura (escala, consistência, performance, multi-registradora)
+respondidas em [`docs/faq.md`](docs/faq.md).
+
 ## Dívida conhecida
 
 Duas rodadas de revisão adversarial de arquitetura. A primeira corrigiu os bloqueadores
