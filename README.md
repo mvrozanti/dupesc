@@ -37,6 +37,8 @@ Diagramas visuais atualizados (infra, fluxo de dados, pontos de entrada) vivem e
 | Fila SKIP LOCKED com lease | worker reivindica `FOR UPDATE SKIP LOCKED` + `claimed_until` |
 | Advisory lock | jobs singleton (leitor 741001, reconciliador 741002) |
 | Idempotência por unique constraint | `event_id`, `operacao_legado_id`, `referencia_externa`, `operation_id` |
+| Teto de taxa global | token bucket em tabela, compartilhado por envio e consulta entre todos os pods |
+| No máximo um título ativo | índice único parcial `(duplicata_id) WHERE ativo` — dupla escrituração vira incidente, não silêncio |
 | Circuit breaker + rate limiter | Resilience4j por registradora; 423/429 nunca esgotam tentativas |
 | Reconciliação | ENVIADO há > 30 min é reconsultado por lote; leases vencidos voltam à fila |
 | Estado terminal guardado | todo UPDATE de transição usa `WHERE estado IN (...)` — webhook e reconciliador podem colidir sem regressão |
@@ -49,9 +51,10 @@ Diagramas visuais atualizados (infra, fluxo de dados, pontos de entrada) vivem e
 
 ## Modelo de dados — 1 banco, 1 DLQ
 
-7 tabelas: `intencao` (fonte), `operacao` (estado por registradora), `titulo`
-(IUD ↔ duplicata_id interno), `eventos_recebidos` (dedup de webhook), `outbox`
-(fila transacional), `checkpoint` (página do legado), `dlq`.
+8 tabelas: `intencao` (fonte), `operacao` (estado por registradora), `titulo`
+(IUD ↔ duplicata_id, por registradora, com um só ativo), `eventos_recebidos`
+(dedup de webhook), `outbox` (fila transacional), `checkpoint` (cursor do legado),
+`rate_limit` (token bucket global), `dlq`.
 
 **Por que uma DLQ só**: uma única superfície de revisão operacional — a tabela `dlq`
 com `origem` em `OUTBOX|WEBHOOK|LEITOR|INGESTAO`. Rejeição de negócio da registradora

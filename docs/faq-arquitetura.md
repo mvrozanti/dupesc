@@ -203,13 +203,21 @@ por quanto tempo esperamos, nem que a saída do limbo seja automática.
 Existe um token bucket em tabela (`rate_limit`) que dá teto global, não por pod —
 o limiter in-process do resilience4j sozinho permitiria N×80.
 
-**Limite honesto, dois furos:**
+É token bucket de verdade, em tabela: recarga contínua proporcional ao tempo
+decorrido, burst limitado ao teto, e **nada é consumido quando a permissão é
+negada**. Cobre `enviar` e `consultar` — a reconciliação pede permissão por lote
+e deixa o que não couber para o ciclo seguinte, então envio e consulta dividem o
+mesmo teto em vez de somarem dois.
 
-- O limiter global guarda só `enviar`. O `consultar` da reconciliação — que é o
-  caminho de maior volume depois de uma indisponibilidade — **não passa pelo
-  limiter**. Envio e consulta somados podem dobrar o teto.
-- É janela fixa de 1s, não token bucket: 80 no fim de uma janela e 80 no começo
-  da seguinte são 160 req num intervalo de milissegundos.
+Antes era janela fixa de 1s (80 no fim de uma janela + 80 no começo da seguinte =
+160 req em milissegundos) e o `consultar` não passava pelo limiter.
+
+Coberto por `HardeningSegundoRoundTest`: "token bucket e global e nao consome
+permissao quando nega" e "token bucket recarrega com o tempo".
+
+**Limite honesto:** o teto conta **chamadas HTTP**, e um `enviar` carrega até 200
+operações. Se o limite contratado for por operação e não por requisição, o número
+está na unidade errada.
 
 ### 4.2 "Autoscaling por profundidade de fila não piora o gargalo?" 🟡
 
@@ -231,12 +239,18 @@ Advisory lock de sessão (`pg_try_advisory_lock`) em conexão dedicada, liberado
 `finally`. O lock é de sessão e não de transação justamente para não manter uma
 transação aberta durante I/O externo.
 
-**Limite honesto:** se o `pg_advisory_unlock` falhar, a conexão volta para o pool
-**ainda com o lock**, e como o pool não fecha a conexão física, o lock só cai
-quando o Hikari retira a conexão por `maxLifetime` (30 min default). Nessa
-janela, nenhum pod reconcilia e nada alerta. Pior: se a mesma conexão for
-reusada, `pg_try_advisory_lock` é reentrante e o contador sobe — um `unlock` não
-solta. Falta `pg_advisory_unlock_all` no checkout da conexão.
+Três defesas, porque o lock de sessão sobrevive ao retorno da conexão ao pool:
+`pg_advisory_unlock_all()` ao pegar a conexão (ela não pode chegar carregando
+lock de ninguém, o que também mata o problema de reentrância do
+`pg_try_advisory_lock`); `unlock` no `finally`; e se o `unlock` falhar ou devolver
+falso, a conexão é **descartada do pool** (`evictConnection`) com log de erro, em
+vez de voltar para a fila carregando o lock. Antes, um `unlock` falho deixava o
+lock preso até o `maxLifetime` do Hikari (30 min default) sem nenhum pod
+reconciliar e sem alerta.
+
+Coberto por `HardeningSegundoRoundTest`: "advisory lock nao vaza quando o bloco
+lanca" e "advisory lock exclui o segundo tomador enquanto esta preso" — ambos
+verificam `pg_locks` no fim.
 
 ---
 
@@ -256,12 +270,34 @@ escriturador do sacador ou só onde é participante? Enquanto não houver respos
 `IngestaoService` fixa `CERC` e a coluna tem `DEFAULT 'CERC'`. É a maior questão
 em aberto do projeto e não dá para resolver escrevendo código.
 
-### 5.3 "O modelo suporta a mesma duplicata em duas registradoras?" 🔴
+### 5.3 "O modelo suporta a mesma duplicata em duas registradoras?" 🟢
 
-Não. `titulo.duplicata_id` é `UNIQUE`, então uma duplicata não pode ter dois
-IUDs — e o `ON CONFLICT DO NOTHING` sem target faz a segunda inserção **falhar
-em silêncio**, sem erro. Pré-requisito da multi-registradora: trocar por
-`UNIQUE (registradora, duplicata_id)`. Está registrado como dívida.
+Suporta **registrar o fato**, e impede **ter duas ativas** — que são coisas
+diferentes, e a distinção é o ponto.
+
+Uma duplicata escritural deve existir em uma registradora só; duas ativas é
+exatamente a dupla escrituração que a interoperabilidade entre registradoras
+existe para impedir. Então: `titulo` tem `UNIQUE (registradora, duplicata_id)`
+(dá para guardar o histórico — portabilidade, cancelamento em A e registro em B)
+mais um índice único parcial `(duplicata_id) WHERE ativo`, que garante **no
+máximo um título ativo por duplicata, entre todas as registradoras**.
+
+A inserção resolve isso numa instrução só e devolve o que aconteceu: `NOVO`,
+`JA_EXISTE` (replay do mesmo IUD, idempotente) ou `CONFLITO_ATIVO` — e neste
+último caso o título é gravado como inativo **e o conflito vira incidente na
+DLQ com log de erro**. Antes, o `ON CONFLICT DO NOTHING` sem target engolia essa
+colisão em silêncio: era o pior comportamento possível, porque perdia justamente
+o sinal de que uma duplicata foi escriturada duas vezes.
+
+Coberto por `HardeningSegundoRoundTest`: "mesma duplicata em duas registradoras
+guarda os dois titulos com um so ativo" e "registro duplicado detectado pelo
+webhook vira incidente na dlq".
+
+**Limite honesto:** dois pods checando o índice ao mesmo tempo podem ambos
+calcular "não existe ativo"; o índice único é o desempate e um dos dois recebe
+erro. Na prática a reconciliação é single-holder por advisory lock e o webhook é
+esporádico, mas a corrida existe. E resolver um `CONFLITO_ATIVO` — decidir qual
+registro fica — é manual.
 
 ### 5.4 "O circuit breaker é por registradora?" 🟡
 
@@ -339,8 +375,12 @@ Nenhum. Os defaults `poc-*` existem para a demo, e `CredenciaisGuard` aborta o
 boot se um deles aparecer fora dos perfis `demo`/`test`/`mock-*`. Em produção:
 Secrets Manager.
 
-**Limite honesto:** o guard casa pelo prefixo `poc-`. Qualquer outro valor fraco
-passa, e a senha do banco não é verificada.
+O guard rejeita placeholders conhecidos (`poc-`, `dupesc`, `changeme`, `secret`,
+`password`, `test`, `admin`), valores em branco e qualquer segredo com menos de 16
+caracteres — e cobre também `spring.datasource.password` e o `client-id`.
+
+**Limite honesto:** é lista de proibidos com piso de tamanho, não medida de
+entropia. Um segredo ruim de 16+ caracteres passa.
 
 ### 7.3 "O HMAC do webhook protege contra replay?" 🟡
 
@@ -354,10 +394,14 @@ Não mais: `validarLote` confere o `lote_id` do evento contra o
 `operacao.lote_id` antes de aplicar. Antes, qualquer corpo assinado podia marcar
 qualquer operação como `REGISTRADO` com IUD arbitrário.
 
-**Limite honesto:** a divergência de `lote_id` levanta exceção, a transação
-inteira do webhook reverte — **inclusive a linha de dedup** — e o evento vai para
-a DLQ. Então um único item com `lote_id` defasado descarta o webhook inteiro,
-inclusive os itens legítimos, e cada retry da CERC gera uma nova linha na DLQ.
+Divergência de `lote_id` agora descarta **só o item**: ele vai para a DLQ com o
+motivo, os itens legítimos do mesmo webhook são aplicados, e a linha de dedup
+commita. Antes a divergência levantava exceção e revertia a transação inteira
+— inclusive o dedup — então cada retry da registradora gerava uma nova linha na
+DLQ para o mesmo evento, indefinidamente.
+
+Coberto por `HardeningSegundoRoundTest`: "lote_id divergente descarta so o item e
+preserva o dedup do evento".
 
 ---
 
@@ -369,11 +413,16 @@ Gauges Micrometer em `/actuator/prometheus`: `dupe.fila.pendente`,
 `dupe.fila.idade_ms`, `dupe.dlq.abertos`, contador `dupe.webhook.401`. Alertas:
 fila > 10k, idade > 15 min, DLQ > 0.
 
+A idade conta de `coalesce(reenfileirado_em, criado_em)`, então um item
+reprocessado da DLQ conta do reprocesso e não do `criado_em` original — antes o
+alerta de idade disparava para sempre depois de qualquer reprocesso. A consulta
+também devolve `null` de verdade com fila vazia (antes `rs.getDouble` mapeava
+NULL para 0.0 e o contrato `Long?` era mentira).
+
 **Limite honesto:** `dupe.fila.pendente` conta `PENDENTE` incluindo itens
-reagendados para o futuro. Durante as 12 horas de janela fechada da CERC, o
-backlog inteiro é `PENDENTE` e o alerta de fila toca a noite toda. E um item
-reprocessado da DLQ mantém o `criado_em` original, então a idade dispara
-permanentemente depois de qualquer reprocesso.
+reagendados para o futuro. Durante as 12 horas de janela fechada da registradora,
+o backlog inteiro é `PENDENTE` e o alerta de fila toca a noite toda — falta
+separar "pendente agora" de "pendente reagendado".
 
 ### 8.2 "O que o operador faz com um item na DLQ?" 🟡
 
@@ -430,8 +479,14 @@ que apareceu um bug latente que nenhuma revisão por leitura tinha pego:
 caminho de falha permanente lançava exceção em vez de gravar** — inclusive
 "tentativas esgotadas → DLQ", que nunca funcionou de verdade.
 
-**Limite honesto:** continuam sem teste o rate limiter em tabela, o
-`CredenciaisGuard`, o vazamento de advisory lock (4.4) e o caminho de
+O terceiro round acrescentou `HardeningSegundoRoundTest` (8 testes): vazamento e
+exclusão do advisory lock, token bucket global e recarga, `lote_id` divergente
+preservando o dedup, título por registradora com um só ativo, incidente de
+registro duplicado na DLQ, e idade da fila pelo reenfileiramento. Escrever esses
+testes achou um segundo bug latente: `idadePendenteMaisAntigoMs` devolvia 0 em
+vez de `null` com fila vazia. Total: 28 testes.
+
+**Limite honesto:** continuam sem teste o `CredenciaisGuard` e o caminho de
 cancelamento — que não existe.
 
 ### 9.3 "Qual a diferença entre esta POC e produção de verdade?" 🟡
@@ -463,13 +518,7 @@ onde vêm reenvios e duplicidade.
 legítima. O argumento técnico é o ack transacional; o argumento organizacional
 (quem é dono, quem está de plantão) não foi resolvido.
 
-### 10.3 "Quem mantém isso quando você sair?" 🔴
-
-Pergunta aberta. Hoje: 2.900 linhas de Kotlin, sem comentário por decisão de
-estilo, com o "por quê" no README e em `docs/`. Não há segundo mantenedor nem
-runbook de plantão.
-
-### 10.4 "Quanto disso é código de IA?" 🟢
+### 10.3 "Quanto disso é código de IA?" 🟢
 
 A arquitetura foi revisada adversarialmente e o registro está em
 `docs/revisao-hardening.md`: cada crítica, a melhoria aplicada e o status.
@@ -484,19 +533,23 @@ Levar para a sala como "conhecido e priorizado", nunca como resolvido:
 
 | # | Item | Gravidade |
 |---|---|---|
-| 4.4 | Advisory lock de sessão pode vazar por até 30 min | recuperação para sem alerta |
-| 4.1 | `consultar` fora do teto global de taxa | 2× o limite da registradora |
 | 6.4 | Sem cancelamento/alteração de duplicata | lacuna funcional |
-| 5.2 / 5.3 | Roteamento (jurídico) e `titulo.duplicata_id UNIQUE` | bloqueia multi-registradora |
+| 5.2 | Roteamento entre registradoras — questão jurídica, não técnica | bloqueia multi-registradora |
+| 6.3 | Parcelamento e duplicata de serviço sem teste | não afirmar cobertura |
 | 3.5 | `consultas-limite` global, sem SLA por registradora; saída do limbo é manual | calibração pendente |
 | 7.1 | Chave estática sem identidade nem auditoria numa superfície com dado pessoal | endurecer antes de produção |
-| 1.4 | Sem poda nem partição de `operacao`/`outbox` | 🕐 problema de 2 anos |
+| 8.1 | Alerta de fila toca a noite toda na janela fechada | ruído operacional |
+| 1.4 | Sem poda nem partição de `operacao`/`outbox` | problema de 2 anos |
 | 2.4 | Janela estreita de reenvio se o POST passar do lease | residual, não eliminado |
 | 8.4 | RTO/RPO de desenho, sem game day | não medido |
-| 9.2 | Rate limiter, guard de credencial e 4.4 sem teste | dívida assumida |
+| 9.2 | `CredenciaisGuard` sem teste | dívida assumida |
 
-**Corrigidos no segundo round** (não estão mais na lista acima): `/api/dlq` sem
+**Corrigidos nos rounds 2 e 3** (não estão mais na lista): `/api/dlq` sem
 autenticação, janela 423 condenando lote em voo, 4xx despejando o lote na DLQ,
-reprocesso deixando operação órfã, poison-pill sem bisect, e o `CAST` de texto
-para `jsonb` que quebrava todo caminho de falha permanente. Registro em
+reprocesso deixando operação órfã, poison-pill sem bisect, vazamento de advisory
+lock, `consultar` fora do teto de taxa, janela fixa em vez de token bucket,
+`lote_id` divergente enchendo a DLQ a cada retry, dupla escrituração engolida em
+silêncio, idade da fila depois de reprocesso, e dois bugs latentes que só
+apareceram ao escrever os testes (`CAST` de texto para `jsonb` em
+`falhaPermanente`, e `Long?` que nunca era null). Registro em
 [`revisao-hardening.md`](revisao-hardening.md).

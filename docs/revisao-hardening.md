@@ -76,6 +76,23 @@ verbos, orçamento de consultas preservado sob falha, `INDETERMINADO` em vez de
 `FALHA_PERMANENTE`, atomicidade do reprocesso, bisect isolando o item ruim, rota
 errada não drenando a fila. Suíte: 20 testes, verde.
 
+## Terceiro round — o que tinha ficado como dívida
+
+| # | Crítica | Melhoria | Status |
+|---|---|---|---|
+| 22 | Advisory lock de sessão vazava: `unlock` falho devolvia a conexão ao pool com o lock preso até o `maxLifetime` do Hikari (30 min), sem reconciliação e sem alerta; `pg_try_advisory_lock` reentrante fazia um `unlock` não soltar | `pg_advisory_unlock_all()` ao pegar a conexão, `unlock` no `finally`, e `evictConnection` + log de erro se o `unlock` falhar | corrigido |
+| 23 | Teto global de taxa cobria só `enviar`; `consultar` da reconciliação ficava fora, somando 2× o limite. E era janela fixa de 1s, não token bucket: 2× o teto na virada | token bucket real em tabela (recarga contínua, burst limitado, nada consumido quando nega), aplicado a `enviar` e `consultar` | corrigido |
+| 24 | `lote_id` divergente levantava exceção e revertia a transação do webhook inteira — inclusive a linha de dedup — então cada retry da registradora gerava nova linha na DLQ para o mesmo evento | divergência descarta só o item, com motivo na DLQ; dedup commita e os itens legítimos são aplicados | corrigido |
+| 25 | `titulo.duplicata_id UNIQUE` com `ON CONFLICT DO NOTHING` sem target: dupla escrituração era engolida em silêncio, perdendo o sinal mais importante do domínio | `UNIQUE (registradora, duplicata_id)` para guardar o histórico + índice único parcial `(duplicata_id) WHERE ativo` para no máximo um título ativo; inserção devolve `NOVO`/`JA_EXISTE`/`CONFLITO_ATIVO` e o conflito vira incidente na DLQ | corrigido |
+| 26 | Idade da fila usava `criado_em`, então qualquer reprocesso da DLQ fazia o alerta de idade disparar para sempre | `coalesce(reenfileirado_em, criado_em)` | corrigido |
+| 27 | `CredenciaisGuard` casava só o prefixo `poc-` e ignorava a senha do banco | lista de placeholders conhecidos, piso de 16 caracteres, cobre `spring.datasource.password` e `client-id` | corrigido |
+| 28 | **Latente:** `idadePendenteMaisAntigoMs` devolvia 0 em vez de `null` com fila vazia — `rs.getDouble` mapeia SQL NULL para 0.0 | consulta com `ORDER BY ... LIMIT 1`, sem linha quando a fila está vazia | corrigido |
+
+Achado 28, como o 21, só apareceu ao escrever o teste. Dois de dois bugs latentes
+vieram de testes, nenhum de leitura de código.
+
+Cobertura nova: `HardeningSegundoRoundTest` (8 testes). Suíte: 28 testes.
+
 ## Dívida registrada (não implementada agora)
 
 - Poison-pill: bisect de lote com item ruim (reenvia o lote todo hoje).
@@ -84,6 +101,8 @@ errada não drenando a fila. Suíte: 20 testes, verde.
 - Timestamp/nonce no HMAC do webhook.
 - `consultas-limite` é global; precisa ser por registradora e calibrado contra SLA
   (ver FAQ 3.5).
-- Vazamento de advisory lock de sessão se o `unlock` falhar (FAQ 4.4).
-- `consultar` fora do teto global de taxa (FAQ 4.1).
 - Autenticação da DLQ é chave estática, sem identidade nem auditoria (FAQ 7.1).
+- Alerta de fila não separa "pendente agora" de "pendente reagendado", então toca
+  a noite toda na janela fechada (FAQ 8.1).
+- Teto de taxa conta requisições HTTP, não operações (FAQ 4.1).
+- `CredenciaisGuard` sem teste.
