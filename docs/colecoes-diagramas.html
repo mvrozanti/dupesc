@@ -70,7 +70,7 @@ const K = {
       participant L as Legado
       participant PG as Postgres
       participant W as Worker
-      participant C as CERC
+      participant C as registradora
       participant H as Webhook
       L->>PG: leitor/push: tx(intencao+operacao+outbox)
       W->>PG: SKIP LOCKED reivindica (EM_ENVIO)
@@ -86,7 +86,7 @@ const K = {
     m: `flowchart LR
       subgraph ext["EXTERNO"]
         legado{{"sistema legado"}}
-        cerc{{"CERC"}}
+        cerc{{"registradora"}}
       end
       subgraph nos["NOSSO"]
         pod("dupesc — N pods<br/>jobs + API")
@@ -144,7 +144,7 @@ const K = {
         reconcil("ReconciliadorJob")
         webhook("WebhookController")
       end
-      cerc{{"CERC"}}
+      cerc{{"registradora"}}
       api ==>|"1 tx"| outbox
       leitor ==>|"1 tx"| outbox
       outbox -->|"SKIP LOCKED"| worker
@@ -170,7 +170,7 @@ const K = {
     t: "Estados da duplicata", cap: "A vida de uma duplicata, com a nossa parte dentro da caixa.",
     m: `flowchart TD
       ingress(["nova · push<br/>backlog · pull"])
-      cerc{{"CERC<br/>processa · gera IUD"}}
+      cerc{{"registradora<br/>processa · gera IUD"}}
       subgraph nos["dupesc — o que é nosso"]
         P("PENDENTE")
         E("EM_ENVIO")
@@ -268,7 +268,7 @@ const D = [
     verdict:{pos:"mixed", why:"Útil para revisão de operação, mas como primeira impressão passa a mensagem errada.", run:"Garantias primeiro"} },
   { id:"pergunta", name:"Pergunta-resposta", sub:"cada diagrama responde uma objeção",
     order:["infra","fluxo","garantias","entradas"], layout:"qa",
-    intro:"Cada bloco vem emparelhado com a objeção que mata: 'como escala?', 'e a consistência?', 'só tem CERC?'. É o FAQ ilustrado.",
+    intro:"Cada bloco vem emparelhado com a objeção que mata: 'como escala?', 'e a consistência?', 'só tem uma registradora?'. É o FAQ ilustrado.",
     ledger:{touches:"docs/faq.md — o conteúdo entra colado aos diagramas", adds:"par de Q&A por bloco", removes:"nada", gives:"a ordem deixa de ser lógica para ser retórica — quem não tem a pergunta não acha a resposta"},
     verdict:{pos:"mixed", why:"Fortíssima para defender sob fogo, mas fraca como leitura linear de quem acabou de chegar.", run:null} },
   { id:"banco", name:"O banco como espinha", sub:"as oito tabelas organizam tudo",

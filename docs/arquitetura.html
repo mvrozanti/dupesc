@@ -153,7 +153,7 @@
 flowchart LR
   subgraph ext["EXTERNO"]
     legado{{"sistema legado"}}
-    cerc{{"CERC"}}
+    cerc{{"registradora"}}
   end
   subgraph nos["NOSSO"]
     pod("dupesc&lt;br/&gt;N pods · 1 binário&lt;br/&gt;jobs + API")
@@ -216,7 +216,7 @@ flowchart LR
     webhook("WebhookController")
   end
   subgraph o4["4 · registradora"]
-    cerc{{"CERC"}}
+    cerc{{"registradora"}}
   end
 
   legado --&gt;|"pull · migração · checkpoint"| leitor
@@ -263,7 +263,7 @@ flowchart LR
 <pre class="mermaid">
 flowchart TD
   ingress[/"nova duplicata · push&lt;br/&gt;backlog · pull"/]
-  cerc{{"CERC · registradora&lt;br/&gt;processa o lote → gera IUD"}}
+  cerc{{"registradora&lt;br/&gt;processa o lote → gera IUD"}}
 
   subgraph nos["dupesc · o que é nosso"]
     PENDENTE("PENDENTE&lt;br/&gt;fila outbox")
