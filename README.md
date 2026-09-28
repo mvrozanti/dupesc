@@ -100,28 +100,27 @@ Testes: `./gradlew test` — Testcontainers (Postgres 16) + WireMock.
   Kafka entra **se/quando** houver fan-out real (vários consumidores independentes),
   pendurado no outbox via CDC — nunca no caminho crítico.
 
-## FAQ
-
-Objeções à arquitetura (escala, consistência, performance, multi-registradora)
-respondidas em [`docs/faq.md`](docs/faq.md).
-
 ## Dívida conhecida
 
-Duas rodadas de revisão adversarial de arquitetura. A primeira corrigiu os bloqueadores
-de produção (timeouts, advisory lock, enum da registradora), perda/duplicação sob operação
-normal (lease, cursor, DLQ), segurança e observabilidade — e introduziu quatro regressões
-piores, que a segunda rodada corrigiu: DLQ sem autenticação expondo dado pessoal, a janela
-operacional noturna condenando todo lote em voo, 4xx despejando o lote inteiro na DLQ, e o
-reprocesso deixando operação órfã. O registro completo — cada crítica, a melhoria aplicada
-e o status — está em [`docs/revisao-hardening.md`](docs/revisao-hardening.md).
+Quatro rodadas de revisão adversarial. A primeira corrigiu os bloqueadores de produção
+(timeouts, advisory lock, enum da registradora) e perda/duplicação sob operação normal
+(lease, cursor, DLQ). As três seguintes corrigiram, em boa parte, **regressões
+introduzidas pela rodada anterior** — DLQ sem autenticação expondo dado pessoal, a janela
+operacional noturna condenando todo lote em voo, 4xx despejando o lote inteiro na DLQ,
+reprocesso deixando operação órfã, e o bisect sem prazo reabrindo a dupla escrituração que
+duas rodadas tinham fechado. O registro completo — cada crítica, a melhoria aplicada e o
+status — está em [`docs/revisao-hardening.md`](docs/revisao-hardening.md).
 
-As perguntas adversariais que este desenho atrai — com resposta, e com o limite
-honesto de cada resposta — estão em [`docs/faq-arquitetura.md`](docs/faq-arquitetura.md).
+Dois bugs latentes só apareceram ao escrever teste, nenhum por leitura de código; desde o
+quarto round, todo teste novo é rodado contra o código anterior para confirmar que falha.
 
-Dívida registrada (não implementada): bisect de lote com poison-pill, cancelamento/
-alteração de duplicata (PATCH/inativar da CERC), timestamp/nonce no HMAC, e a chave
-`(registradora, duplicata_id)` no título — pré-requisito da multi-registradora, aguardando
-a resposta jurídica de roteamento.
+As perguntas adversariais que este desenho atrai — com resposta, e com o limite honesto de
+cada resposta — estão em [`docs/faq-arquitetura.md`](docs/faq-arquitetura.md), que fecha
+com o índice do que **não** dá para defender hoje.
+
+Dívida registrada (não implementada): cancelamento/alteração de duplicata (PATCH/inativar
+da registradora), timestamp/nonce no HMAC, `consultas-limite` por registradora calibrado
+contra SLA, e a regra de roteamento — aguardando a resposta jurídica.
 
 ## Próximas fases
 

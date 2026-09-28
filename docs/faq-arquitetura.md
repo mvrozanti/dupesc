@@ -51,6 +51,24 @@ arquivamento nem partição implementada**. `buscarEnviadosPresos` faz seq scan
 sem índice. Em 2 anos de produção isso precisa de partição; hoje é intenção
 escrita, não código.
 
+### 1.5 "É mais rápido que Kafka?" 🟡
+
+O teto de throughput é o mesmo, porque o gargalo é a registradora e não a
+mensageria. O que muda é o caminho: uma transação e uma chamada HTTP, sem
+produce+consume no meio, e sem rebalance de consumer group para causar degrau de
+p99. "Mais performático" aqui significa chegar ao teto da registradora gastando
+menos infra — não processar mais.
+
+**Limite honesto:** não existe benchmark neste repositório. Essa é uma afirmação
+sobre a forma do caminho, não um número medido. Se alguém pedir o p99, a resposta
+honesta é "não medimos".
+
+### 1.6 "E se precisar publicar eventos para outros sistemas?" 🟢
+
+O `outbox` já é o log ordenado do que aconteceu. CDC pendurado nele vira fonte de
+eventos e Kafka entra como **saída**, sem tocar o caminho crítico. É a mesma
+posição do ADR-001: broker quando houver fan-out real, nunca no meio da
+escrituração.
 ---
 
 ## 2. Não perder e não duplicar
@@ -121,6 +139,13 @@ registradora antes de qualquer reenvio.
 Coberto por `HardeningTest`: "consulta que falha nao consome o orcamento de
 consultas" e "preso em processamento vira INDETERMINADO e nao FALHA_PERMANENTE".
 
+O mesmo vale para lote que a registradora devolve em `ERRO`: o desfecho **por
+item** é desconhecido, então ele também vai para `INDETERMINADO`, não é
+reenviado. Antes, `ERRO` de lote re-enfileirava tudo cegamente — e como o
+reenvio gera um `lote_id` novo, o webhook do lote antigo chegava divergente e
+era descartado pelo guard de integridade: a registradora ficava com dois títulos
+e nós registrávamos um, com a evidência do primeiro na lixeira.
+
 **Limite honesto:** `consultas-limite` é um número só (12) para todas as
 registradoras, e não foi calibrado contra SLA nenhum — ver 3.5. E a conferência
 que resolve um `INDETERMINADO` é manual: não há reconciliação por identificador
@@ -139,9 +164,21 @@ tamanho 1 que continua sendo rejeitada vai para a DLQ; os outros 199 seguem.
 Coberto por `HardeningTest`: "lote rejeitado e bissectado para isolar so o item
 ruim" e "rota errada na registradora nao despeja a fila na dlq".
 
-**Limite honesto:** o pior caso do bisect é O(2n) chamadas HTTP quando *todo*
-item do lote é ruim. Isso é autolimitado pelo teto de taxa (o excedente
-reagenda), mas é uma rajada.
+O bisect só dispara em **rejeição de conteúdo** (400/422, que vem de resposta da
+registradora e pode ser de um item). Erro local — registradora fora do registry,
+por exemplo — vai direto para a DLQ numa chamada só, em vez de gerar 2n−1
+recursões inúteis queimando o teto de taxa.
+
+E o bisect tem prazo: antes de cada chamada ele compara o relógio com
+`claimed_until` menos 25% do lease e, se não couber, devolve o resto à fila como
+retryável. Sem isso, um lote de 200 todo ruim daria até 399 chamadas × 10s de
+`readTimeout` ≈ 66 min contra um lease de 10 min — o lease venceria no meio, o
+reconciliador devolveria as linhas, outro pod reenviaria, e o bisect original
+carimbaria `lote_id` em cima da operação do outro pod. Era a dupla escrituração
+não reconciliável de volta, pela porta dos fundos.
+
+**Limite honesto:** o pior caso do bisect ainda é O(2n) chamadas quando *todo*
+item do lote é ruim, dentro do prazo do lease. É uma rajada, só que limitada.
 
 ### 3.3 "E o poison-pill: um item ruim travando o lote?" 🟢
 
@@ -200,10 +237,8 @@ por quanto tempo esperamos, nem que a saída do limbo seja automática.
 
 ### 4.1 "Você diz escala horizontal, mas o teto é 80 req/s. N pods não estouram isso?" 🟡
 
-Existe um token bucket em tabela (`rate_limit`) que dá teto global, não por pod —
-o limiter in-process do resilience4j sozinho permitiria N×80.
-
-É token bucket de verdade, em tabela: recarga contínua proporcional ao tempo
+É token bucket em tabela, teto global e não por pod — o limiter in-process do
+resilience4j sozinho permitiria N×80. Recarga contínua proporcional ao tempo
 decorrido, burst limitado ao teto, e **nada é consumido quando a permissão é
 negada**. Cobre `enviar` e `consultar` — a reconciliação pede permissão por lote
 e deixa o que não couber para o ciclo seguinte, então envio e consulta dividem o
@@ -214,6 +249,10 @@ Antes era janela fixa de 1s (80 no fim de uma janela + 80 no começo da seguinte
 
 Coberto por `HardeningSegundoRoundTest`: "token bucket e global e nao consome
 permissao quando nega" e "token bucket recarrega com o tempo".
+
+Usa `clock_timestamp()` e não `now()`: `now()` é o timestamp da *transação*, e se
+alguém um dia envolver o worker numa transação os tokens parariam de recarregar e
+o envio travaria por completo.
 
 **Limite honesto:** o teto conta **chamadas HTTP**, e um `enviar` carrega até 200
 operações. Se o limite contratado for por operação e não por requisição, o número
@@ -244,9 +283,11 @@ Três defesas, porque o lock de sessão sobrevive ao retorno da conexão ao pool
 lock de ninguém, o que também mata o problema de reentrância do
 `pg_try_advisory_lock`); `unlock` no `finally`; e se o `unlock` falhar ou devolver
 falso, a conexão é **descartada do pool** (`evictConnection`) com log de erro, em
-vez de voltar para a fila carregando o lock. Antes, um `unlock` falho deixava o
-lock preso até o `maxLifetime` do Hikari (30 min default) sem nenhum pod
-reconciliar e sem alerta.
+vez de voltar para a fila carregando o lock — e se o próprio `evictConnection`
+falhar (DataSource embrulhado por proxy de tracing, por exemplo), a sessão é
+encerrada com `pg_terminate_backend`, que derruba o lock de qualquer jeito. Antes,
+um `unlock` falho deixava o lock preso até o `maxLifetime` do Hikari (30 min
+default) sem nenhum pod reconciliar e sem alerta.
 
 Coberto por `HardeningSegundoRoundTest`: "advisory lock nao vaza quando o bloco
 lanca" e "advisory lock exclui o segundo tomador enquanto esta preso" — ambos
@@ -458,6 +499,16 @@ RTO é o tempo de subir pod novo mais a expiração de lease.
 **Limite honesto:** não foi feito game day. Os números são de desenho, não
 medidos.
 
+### 8.5 "Banco único não é ponto único de falha?" 🟡
+
+É um ponto de falha, sim — mitigado com RDS Multi-AZ e PITR. O contraponto é que,
+como a fila **é** o banco, não há um segundo sistema para sincronizar: uma fonte
+de falha a menos, não a mais. Com broker, um Postgres indisponível continuaria
+derrubando a escrituração, só que agora com a fila divergindo do estado.
+
+**Limite honesto:** "mitigado" não é "não é". Um failover de AZ é medido em
+dezenas de segundos a minutos, durante os quais nada é escriturado — e isso nunca
+foi exercitado aqui (ver 8.4).
 ---
 
 ## 9. Prova e qualidade
@@ -485,6 +536,11 @@ preservando o dedup, título por registradora com um só ativo, incidente de
 registro duplicado na DLQ, e idade da fila pelo reenfileiramento. Escrever esses
 testes achou um segundo bug latente: `idadePendenteMaisAntigoMs` devolvia 0 em
 vez de `null` com fila vazia. Total: 28 testes.
+
+O quarto round acrescentou `HardeningQuartoRoundTest` (8 testes) e, mais
+importante, **rodou cada teste novo contra o código anterior para confirmar que
+falhava**: 6 dos 8 falharam, os outros 2 são guardas de regressão. Total: 36
+testes.
 
 **Limite honesto:** continuam sem teste o `CredenciaisGuard` e o caminho de
 cancelamento — que não existe.
@@ -540,16 +596,20 @@ Levar para a sala como "conhecido e priorizado", nunca como resolvido:
 | 7.1 | Chave estática sem identidade nem auditoria numa superfície com dado pessoal | endurecer antes de produção |
 | 8.1 | Alerta de fila toca a noite toda na janela fechada | ruído operacional |
 | 1.4 | Sem poda nem partição de `operacao`/`outbox` | problema de 2 anos |
+| 1.5 | "Mais rápido que Kafka" sem benchmark | afirmação não medida |
 | 2.4 | Janela estreita de reenvio se o POST passar do lease | residual, não eliminado |
-| 8.4 | RTO/RPO de desenho, sem game day | não medido |
+| 8.4 / 8.5 | RTO/RPO de desenho, failover de AZ nunca exercitado | não medido |
 | 9.2 | `CredenciaisGuard` sem teste | dívida assumida |
 
-**Corrigidos nos rounds 2 e 3** (não estão mais na lista): `/api/dlq` sem
+**Corrigidos nos rounds 2, 3 e 4** (não estão mais na lista): `/api/dlq` sem
 autenticação, janela 423 condenando lote em voo, 4xx despejando o lote na DLQ,
 reprocesso deixando operação órfã, poison-pill sem bisect, vazamento de advisory
 lock, `consultar` fora do teto de taxa, janela fixa em vez de token bucket,
 `lote_id` divergente enchendo a DLQ a cada retry, dupla escrituração engolida em
 silêncio, idade da fila depois de reprocesso, e dois bugs latentes que só
 apareceram ao escrever os testes (`CAST` de texto para `jsonb` em
-`falhaPermanente`, e `Long?` que nunca era null). Registro em
-[`revisao-hardening.md`](revisao-hardening.md).
+`falhaPermanente`, e `Long?` que nunca era null); e, no quarto round, lote em
+`ERRO` reenviado cegamente, bisect sem prazo estourando o lease, bisect disparando
+em erro de rota, corrida de título derrubando a reconciliação inteira, consulta de
+idade sem índice, e o guard de credencial que recusava `client-id` legítimo.
+Registro em [`revisao-hardening.md`](revisao-hardening.md).
